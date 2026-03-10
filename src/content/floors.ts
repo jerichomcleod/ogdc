@@ -1,57 +1,49 @@
-import { FloorMap, Cell, CellType } from './types'
+import { FloorMap, FloorTheme } from './types'
+import { generateFloor } from './dungeonGen'
 
-// Map legend:
-//   # = wall
-//   . = floor
-//   @ = player spawn (floor cell)
-//   E = exit (floor cell)
-//   D = door closed (wall cell with override)
+// ── Level sequence: 5 depths × 3 themes = 15 levels ─────────────────────────
 
-const TEST_LAYOUT = [
-  '####################',
-  '#..................#',
-  '#.####.###.####...#',
-  '#.#....#...#..#...#',
-  '#.#.##.#.#.#..####',
-  '#...##...#.......D#',
-  '####.#####.######.#',
-  '#....#.....#......#',
-  '#.####.###.#.####.#',
-  '#.#....#.#.#.#....#',
-  '#.#.##.#.#...#.####',
-  '#@..##...#...#....E',
-  '####################',
+export type LevelId =
+  | 'stone_1'    | 'stone_2'    | 'stone_3'    | 'stone_4'    | 'stone_5'
+  | 'catacomb_1' | 'catacomb_2' | 'catacomb_3' | 'catacomb_4' | 'catacomb_5'
+  | 'machine_1'  | 'machine_2'  | 'machine_3'  | 'machine_4'  | 'machine_5'
+
+export const LEVEL_SEQUENCE: LevelId[] = [
+  'stone_1',    'stone_2',    'stone_3',    'stone_4',    'stone_5',
+  'catacomb_1', 'catacomb_2', 'catacomb_3', 'catacomb_4', 'catacomb_5',
+  'machine_1',  'machine_2',  'machine_3',  'machine_4',  'machine_5',
 ]
 
-function parseLayout(rows: string[]): { cells: Cell[][], spawnX: number, spawnY: number, exitX: number, exitY: number } {
-  let spawnX = 1, spawnY = 1, exitX = 1, exitY = 1
-  const cells: Cell[][] = rows.map((row, y) =>
-    row.split('').map((ch, x): Cell => {
-      if (ch === '@') { spawnX = x; spawnY = y }
-      if (ch === 'E') { exitX = x; exitY = y }
-      const type: CellType = ch === '#' ? 'wall' : 'floor'
-      if (ch === 'D') return { type: 'wall', wallOverride: 'door_closed' }
-      return { type }
-    })
-  )
-  return { cells, spawnX, spawnY, exitX, exitY }
+function levelTheme(id: LevelId): FloorTheme {
+  if (id.startsWith('stone'))    return 'stone'
+  if (id.startsWith('catacomb')) return 'catacomb'
+  return 'machine'
 }
 
-const { cells: testCells, spawnX, spawnY, exitX, exitY } = parseLayout(TEST_LAYOUT)
+// ── Dungeon registry — regenerated per world seed ─────────────────────────────
 
-export const TEST_FLOOR: FloorMap = {
-  id: 'test',
-  theme: 'antechamber',
-  width: TEST_LAYOUT[0].length,
-  height: TEST_LAYOUT.length,
-  cells: testCells,
-  spawnX,
-  spawnY,
-  spawnFacing: 'north',
-  exitX,
-  exitY,
+let worldSeed = 0x4F63_4443   // default seed ("OgDC" in ASCII)
+const floorCache = new Map<string, FloorMap>()
+
+/** Call on town exit — clears cached floors so every level regenerates. */
+export function regenerateDungeons(newSeed: number): void {
+  worldSeed = newSeed
+  floorCache.clear()
 }
 
-export const FLOORS: Record<string, FloorMap> = {
-  test: TEST_FLOOR,
+/** Returns a lazily-generated, cached FloorMap for the given level id. */
+export function getFloor(id: string): FloorMap | undefined {
+  if (floorCache.has(id)) return floorCache.get(id)
+  const idx = LEVEL_SEQUENCE.indexOf(id as LevelId)
+  if (idx === -1) return undefined
+  const theme = levelTheme(id as LevelId)
+  const seed  = (worldSeed + idx * 0x3A7) >>> 0
+  const floor = generateFloor(id, theme, seed)
+  floorCache.set(id, floor)
+  return floor
 }
+
+// Proxy so existing code using FLOORS[id] continues to work
+export const FLOORS: Record<string, FloorMap> = new Proxy({} as Record<string, FloorMap>, {
+  get(_t, prop: string) { return getFloor(prop) },
+})

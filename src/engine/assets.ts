@@ -1,9 +1,18 @@
 // Texture paths — served from publicDir: assets/ via Vite.
-// BASE_URL is '/' in dev and '/ogdc/' (or whatever base is set) in production.
+// BASE_URL is '/' in dev and '/ogdc/' in production.
 const BASE = import.meta.env.BASE_URL
-const STONE_PATHS = Array.from({ length: 7 }, (_, i) => `${BASE}stone_${i + 1}.png`)
-const FLOOR_PATHS = Array.from({ length: 8 }, (_, i) => `${BASE}floor_${i + 1}.png`)
-const CEIL_PATHS  = Array.from({ length: 8 }, (_, i) => `${BASE}ceiling_${i + 1}.png`)
+
+const STONE_PATH    = Array.from({ length: 7  }, (_, i) => `${BASE}stone_${i + 1}.png`)
+const CATACOMB_PATH = Array.from({ length: 10 }, (_, i) => `${BASE}catacombs_${i + 1}.png`)
+const MACHINE_PATH  = Array.from({ length: 12 }, (_, i) => `${BASE}machinery_${i + 1}.png`)
+const FLOOR_PATHS   = Array.from({ length: 8  }, (_, i) => `${BASE}floor_${i + 1}.png`)
+const CEIL_PATHS    = Array.from({ length: 8  }, (_, i) => `${BASE}ceiling_${i + 1}.png`)
+
+const WALL_PATHS_BY_THEME: Record<string, string[]> = {
+  stone:    STONE_PATH,
+  catacomb: CATACOMB_PATH,
+  machine:  MACHINE_PATH,
+}
 
 const cache      = new Map<string, HTMLImageElement>()
 const pixelCache = new Map<string, TexPixels>()
@@ -24,10 +33,12 @@ function loadImage(path: string): Promise<HTMLImageElement> {
 }
 
 export async function preloadAssets(): Promise<void> {
-  const all = [...STONE_PATHS, ...FLOOR_PATHS, ...CEIL_PATHS]
+  const all = [
+    ...STONE_PATH, ...CATACOMB_PATH, ...MACHINE_PATH,
+    ...FLOOR_PATHS, ...CEIL_PATHS,
+  ]
   const imgs = await Promise.all(all.map(loadImage))
 
-  // Pre-extract pixel data for floor/ceiling raycasting
   for (const img of imgs) {
     const off = document.createElement('canvas')
     off.width  = img.naturalWidth
@@ -43,13 +54,9 @@ export async function preloadAssets(): Promise<void> {
   }
 }
 
-// Deterministic per-cell texture index — same result every visit for a given (cx, cy)
+// Deterministic per-cell texture index — same result every visit for (cx, cy)
 export function cellTexIndex(cx: number, cy: number, count: number): number {
   return ((cx * 1259 + cy * 2953 + cx * cy * 73) >>> 0) % count
-}
-
-export function getStone(cx: number, cy: number): HTMLImageElement | undefined {
-  return cache.get(STONE_PATHS[cellTexIndex(cx, cy, STONE_PATHS.length)])
 }
 
 function floorHash(floorId: string, seed: number): number {
@@ -58,25 +65,22 @@ function floorHash(floorId: string, seed: number): number {
   return h
 }
 
-export function getFloorTex(floorId: string): HTMLImageElement | undefined {
-  return cache.get(FLOOR_PATHS[floorHash(floorId, 17) % FLOOR_PATHS.length])
-}
-
-export function getCeilTex(floorId: string): HTMLImageElement | undefined {
-  return cache.get(CEIL_PATHS[floorHash(floorId, 41) % CEIL_PATHS.length])
-}
-
 export function getFloorPixels(floorId: string): TexPixels | undefined {
-  const img = getFloorTex(floorId)
+  const path = FLOOR_PATHS[floorHash(floorId, 17) % FLOOR_PATHS.length]
+  const img  = cache.get(path)
   return img ? pixelCache.get(img.src) : undefined
 }
 
 export function getCeilPixels(floorId: string): TexPixels | undefined {
-  const img = getCeilTex(floorId)
+  const path = CEIL_PATHS[floorHash(floorId, 41) % CEIL_PATHS.length]
+  const img  = cache.get(path)
   return img ? pixelCache.get(img.src) : undefined
 }
 
-export function getStonePixels(cx: number, cy: number): TexPixels | undefined {
-  const img = getStone(cx, cy)
+/** Theme-aware wall texture for a given cell coordinate. */
+export function getWallPixels(cx: number, cy: number, theme: string): TexPixels | undefined {
+  const paths = WALL_PATHS_BY_THEME[theme] ?? STONE_PATH
+  const path  = paths[cellTexIndex(cx, cy, paths.length)]
+  const img   = cache.get(path)
   return img ? pixelCache.get(img.src) : undefined
 }

@@ -14,9 +14,11 @@ export interface Cell {
   wallOverride?: WallOverride
 }
 
+export type FloorTheme = 'stone' | 'catacomb' | 'machine'
+
 export interface FloorMap {
   id: string
-  theme: 'antechamber' | 'mechanism' | 'choir'
+  theme: FloorTheme
   width: number
   height: number
   cells: Cell[][]      // cells[y][x]

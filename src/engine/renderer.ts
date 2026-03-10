@@ -13,7 +13,8 @@ import { getCtx } from './canvas'
 import { GameState } from '../game/gameState'
 import { getCell } from '../systems/mapSystem'
 import { Direction } from '../content/types'
-import { getStonePixels, getFloorPixels, getCeilPixels } from './assets'
+import { getWallPixels, getFloorPixels, getCeilPixels } from './assets'
+import { getFloor } from '../content/floors'
 import { CANVAS_W, DUNGEON_H, HORIZON_Y } from '../constants'
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -134,6 +135,7 @@ function shade(px: number, s: number): number {
 function renderToBuffer(
   out:    Uint32Array,
   floorId: string,
+  theme:  string,
   posX:   number,
   posY:   number,
   facing: Direction,
@@ -211,7 +213,7 @@ function renderToBuffer(
     // Y-side walls receive a small extra darkening for a cheap lighting cue.
     const darkFactor = Math.min(1, dist / SHADE_END + (side === 1 ? 0.10 : 0))
 
-    const tex = getStonePixels(mapX, mapY)
+    const tex = getWallPixels(mapX, mapY, theme)
 
     // 1:1 texture sampling — show a lineH × lineH crop from the centre of
     // the texture, matching the square face size at this distance.
@@ -270,9 +272,10 @@ function getOff(): [CanvasRenderingContext2D, ImageData, Uint32Array] {
 // ── Public entry point ───────────────────────────────────────────────────────
 
 export function renderDungeon(state: GameState): void {
-  const ctx  = getCtx()
-  const run  = state.run
-  const anim = run.anim
+  const ctx   = getCtx()
+  const run   = state.run
+  const anim  = run.anim
+  const theme = getFloor(run.floorId)?.theme ?? 'stone'
 
   let posX   = run.position.x + 0.5
   let posY   = run.position.y + 0.5
@@ -317,12 +320,12 @@ export function renderDungeon(state: GameState): void {
   if (isTurn) {
     // Render into the offscreen buffer, blit to main canvas with x-offset.
     const [offCtx, offData, offBuf] = getOff()
-    renderToBuffer(offBuf, run.floorId, posX, posY, facing)
+    renderToBuffer(offBuf, run.floorId, theme, posX, posY, facing)
     offCtx.putImageData(offData, 0, 0)
     ctx.drawImage(_offCanvas!, Math.round(slideX), 0)
   } else {
     // Render directly into the pre-allocated buffer, one putImageData call.
-    renderToBuffer(_outBuf, run.floorId, posX, posY, facing)
+    renderToBuffer(_outBuf, run.floorId, theme, posX, posY, facing)
     ctx.putImageData(_imgData, 0, 0)
   }
 }
