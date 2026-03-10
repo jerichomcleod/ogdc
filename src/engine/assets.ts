@@ -1,7 +1,9 @@
-// Texture paths — served from publicDir: assets/ via Vite
-const STONE_PATHS = Array.from({ length: 7 }, (_, i) => `/stone_${i + 1}.png`)
-const FLOOR_PATHS = Array.from({ length: 8 }, (_, i) => `/floor_${i + 1}.png`)
-const CEIL_PATHS  = Array.from({ length: 8 }, (_, i) => `/ceiling_${i + 1}.png`)
+// Texture paths — served from publicDir: assets/ via Vite.
+// BASE_URL is '/' in dev and '/ogdc/' (or whatever base is set) in production.
+const BASE = import.meta.env.BASE_URL
+const STONE_PATHS = Array.from({ length: 7 }, (_, i) => `${BASE}stone_${i + 1}.png`)
+const FLOOR_PATHS = Array.from({ length: 8 }, (_, i) => `${BASE}floor_${i + 1}.png`)
+const CEIL_PATHS  = Array.from({ length: 8 }, (_, i) => `${BASE}ceiling_${i + 1}.png`)
 
 const cache      = new Map<string, HTMLImageElement>()
 const pixelCache = new Map<string, TexPixels>()
