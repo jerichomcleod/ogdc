@@ -4,9 +4,9 @@ import { LEVEL_SEQUENCE } from '../content/floors'
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const CELL   = 7     // pixels per map cell in the HTML minimap canvas
-const VIEW_W = 22    // cells wide
-const VIEW_H = 14    // cells tall
+const CELL   = 8     // pixels per map cell in the HTML minimap canvas
+const VIEW_W = 20    // cells wide  → MAP_W = 160px
+const VIEW_H = 13    // cells tall  → MAP_H = 104px
 const MAP_W  = VIEW_W * CELL
 const MAP_H  = VIEW_H * CELL
 

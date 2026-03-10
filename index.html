@@ -7,6 +7,16 @@
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
+    /* ── Section width: all four panels are this wide ────────── */
+    :root {
+      --sw:         160px;   /* section width — every panel matches this  */
+      --ctrl-gap:    10px;   /* gap between panels                        */
+      --dpad-gap:     4px;   /* gap between d-pad buttons                 */
+      --btn-attack-h: 68px;
+      --btn-sec-h:    46px;
+      --btn-aux-h:    32px;
+    }
+
     body {
       background: #0a0806;
       display: flex;
@@ -18,7 +28,7 @@
       font-family: 'Courier New', Courier, monospace;
     }
 
-    /* ── Canvas ──────────────────────────────────────────────── */
+    /* ── Game canvas ─────────────────────────────────────────── */
     canvas#game-canvas {
       display: block;
       image-rendering: pixelated;
@@ -35,6 +45,15 @@
       padding: 8px 10px 12px;
       user-select: none;
       -webkit-user-select: none;
+    }
+
+    /* Every panel is --sw wide */
+    #ctrl-minimap,
+    #ctrl-dpad,
+    #ctrl-actions,
+    #ctrl-log {
+      width: var(--sw);
+      flex-shrink: 0;
     }
 
     /* ── Shared button base ──────────────────────────────────── */
@@ -58,14 +77,12 @@
       border-bottom-width: 1px;
       transform: translateY(2px);
     }
-    .btn:active > *, .btn.pressed > * { pointer-events: none; }
 
     /* ── Minimap + stats ─────────────────────────────────────── */
     #ctrl-minimap {
       display: flex;
       flex-direction: column;
       gap: 5px;
-      flex-shrink: 0;
     }
 
     #minimap-canvas {
@@ -81,25 +98,23 @@
       gap: 2px;
       font-size: 10px;
       line-height: 1.3;
-      color: #6a5a40;
     }
     #minimap-stats .stat-hp    { color: #c8a96a; }
     #minimap-stats .stat-floor { color: #7a6a50; }
     #minimap-stats .stat-dir   { color: #5a4a34; }
 
     /* ── D-pad ───────────────────────────────────────────────── */
+    /* 3 equal columns filling --sw; buttons square via aspect-ratio */
     #ctrl-dpad {
       display: grid;
-      grid-template-columns: repeat(3, var(--btn-size));
-      grid-template-rows:    repeat(2, var(--btn-size));
-      gap: 4px;
-      flex-shrink: 0;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: auto auto;
+      gap: var(--dpad-gap);
     }
 
     .btn-dpad {
-      width:  var(--btn-size);
-      height: var(--btn-size);
-      font-size: 20px;
+      aspect-ratio: 1 / 1;
+      font-size: 18px;
       line-height: 1;
     }
 
@@ -108,8 +123,6 @@
       display: flex;
       flex-direction: column;
       gap: 6px;
-      flex-shrink: 0;
-      min-width: 0;
     }
 
     /* ATTACK — large, red */
@@ -118,22 +131,19 @@
       border: 1px solid #6a2828;
       border-bottom: 4px solid #4a1818;
       color: #e86060;
-      font-size: 18px;
+      font-size: 17px;
       font-weight: bold;
       text-transform: uppercase;
       letter-spacing: 0.1em;
       height: var(--btn-attack-h);
       width: 100%;
     }
-    .btn-attack:active, .btn-attack.pressed {
-      background: #3a1818;
-      color: #ff8080;
-    }
+    .btn-attack:active, .btn-attack.pressed { background: #3a1818; color: #ff8080; }
 
-    /* Secondary button row */
+    /* Secondary button rows */
     .btn-row {
       display: flex;
-      gap: 6px;
+      gap: 5px;
     }
 
     /* USE ITEM — amber */
@@ -142,29 +152,29 @@
       border: 1px solid #5a4a18;
       border-bottom: 3px solid #3a3010;
       color: #d4a840;
-      font-size: 11px;
+      font-size: 10px;
       text-transform: uppercase;
-      letter-spacing: 0.07em;
+      letter-spacing: 0.06em;
       height: var(--btn-sec-h);
       flex: 1;
     }
     .btn-use:active, .btn-use.pressed { background: #2a2410; color: #f0c860; }
 
-    /* INTERACT — teal */
+    /* OPEN/INTERACT — teal */
     .btn-interact {
       background: #08181a;
       border: 1px solid #1a4a50;
       border-bottom: 3px solid #102e32;
       color: #40a8b8;
-      font-size: 11px;
+      font-size: 10px;
       text-transform: uppercase;
-      letter-spacing: 0.07em;
+      letter-spacing: 0.06em;
       height: var(--btn-sec-h);
       flex: 1;
     }
     .btn-interact:active, .btn-interact.pressed { background: #102428; color: #60c8d8; }
 
-    /* MENU / INVENTORY — muted */
+    /* MENU / INV — muted */
     .btn-aux {
       background: #141210;
       border: 1px solid #2e2618;
@@ -183,8 +193,9 @@
       display: flex;
       flex-direction: column;
       justify-content: flex-end;
-      min-height: 60px;
-      min-width: 0;
+      overflow: hidden;
+      border: 1px solid #2a2018;
+      padding: 6px 8px;
     }
 
     #combat-log {
@@ -194,57 +205,43 @@
       font-size: 11px;
       line-height: 1.4;
       word-break: break-word;
+      overflow: hidden;
     }
 
     /* ═══════════════════════════════════════════════════════════
-       WIDE LAYOUT  (≥ 560 px — landscape phone, tablet, desktop)
-       Controls: single flex row  [minimap | dpad | actions | log]
+       WIDE LAYOUT  —  all 4 panels in a single row
+       Kicks in when viewport ≥ 4×--sw + 3×gap + panel padding
+       4×160 + 3×10 + 20 = 690px  →  breakpoint: 700px
        ═══════════════════════════════════════════════════════════ */
-    @media (min-width: 560px) {
-      :root {
-        --btn-size:     64px;
-        --btn-attack-h: 72px;
-        --btn-sec-h:    52px;
-        --btn-aux-h:    38px;
-      }
-
+    @media (min-width: 700px) {
       #controls {
         display: flex;
         flex-direction: row;
-        align-items: flex-start;
-        gap: 12px;
+        align-items: stretch;
+        justify-content: center;
+        gap: var(--ctrl-gap);
       }
-
-      #ctrl-log { flex: 1; }
-
-      #ctrl-actions { width: 180px; }
     }
 
     /* ═══════════════════════════════════════════════════════════
-       NARROW LAYOUT  (< 560 px — portrait phone)
-       Controls: 2×2 grid
+       NARROW LAYOUT  —  2 × 2 grid
          [dpad    | actions]
          [minimap | log    ]
        ═══════════════════════════════════════════════════════════ */
-    @media (max-width: 559px) {
-      :root {
-        --btn-size:     58px;
-        --btn-attack-h: 64px;
-        --btn-sec-h:    46px;
-        --btn-aux-h:    34px;
-      }
-
+    @media (max-width: 699px) {
       #controls {
         display: grid;
-        grid-template-columns: auto 1fr;
+        grid-template-columns: var(--sw) var(--sw);
         grid-template-rows: auto auto;
-        gap: 8px;
+        align-items: start;
+        justify-content: center;
+        gap: var(--ctrl-gap);
       }
 
       #ctrl-dpad    { grid-row: 1; grid-column: 1; }
       #ctrl-actions { grid-row: 1; grid-column: 2; }
       #ctrl-minimap { grid-row: 2; grid-column: 1; }
-      #ctrl-log     { grid-row: 2; grid-column: 2; align-self: end; }
+      #ctrl-log     { grid-row: 2; grid-column: 2; align-self: stretch; }
     }
   </style>
 </head>
