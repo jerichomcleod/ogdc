@@ -104,11 +104,10 @@
       transform: translateY(2px);
     }
 
-    /* ── Minimap + stats ─────────────────────────────────────── */
+    /* ── Minimap ─────────────────────────────────────────────── */
     #ctrl-minimap {
       display: flex;
       flex-direction: column;
-      gap: 5px;
     }
 
     #minimap-canvas {
@@ -117,17 +116,6 @@
       image-rendering: crisp-edges;
       border: 1px solid #2a2018;
     }
-
-    #minimap-stats {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      font-size: 10px;
-      line-height: 1.3;
-    }
-    #minimap-stats .stat-hp    { color: #c8a96a; }
-    #minimap-stats .stat-floor { color: #7a6a50; }
-    #minimap-stats .stat-dir   { color: #5a4a34; }
 
     /* ── D-pad — explicit cell sizes, no aspect-ratio ────────── */
     #ctrl-dpad {
@@ -287,11 +275,6 @@
     <!-- ── Minimap ────────────────────────────────────────── -->
     <div id="ctrl-minimap">
       <canvas id="minimap-canvas"></canvas>
-      <div id="minimap-stats">
-        <span class="stat-hp">-- / -- HP</span>
-        <span class="stat-floor">loading…</span>
-        <span class="stat-dir">--</span>
-      </div>
     </div>
 
     <!-- ── D-pad ──────────────────────────────────────────── -->

@@ -101,6 +101,27 @@ export function renderGameOver(state: GameState): void {
   ctx.fillText(`Reached: ${floorLabel}`, CANVAS_W / 2, CANVAS_H / 2 + 60)
 }
 
+// ── HP overlay (top-left of the game canvas) ─────────────────────────────────
+
+export function renderHpOverlay(state: GameState): void {
+  if (state.mode !== 'dungeon') return
+  const ctx = getCtx()
+  const run = state.run
+  const label = `HP  ${run.hp} / ${run.maxHp}`
+
+  ctx.save()
+  ctx.font = 'bold 13px monospace'
+  ctx.textAlign = 'left'
+  const tw = ctx.measureText(label).width
+
+  ctx.fillStyle = 'rgba(0,0,0,0.55)'
+  ctx.fillRect(7, 7, tw + 14, 22)
+
+  ctx.fillStyle = run.hp <= Math.floor(run.maxHp * 0.25) ? '#e86060' : '#c8a96a'
+  ctx.fillText(label, 14, 23)
+  ctx.restore()
+}
+
 // ── Combat log (updates HTML #combat-log element) ────────────────────────────
 
 export function renderCombatLog(state: GameState): void {

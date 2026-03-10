@@ -119,14 +119,14 @@ export function renderMinimap(state: GameState): void {
   ctx.closePath()
   ctx.fill()
 
-  // HTML stats
-  const statsEl = document.getElementById('minimap-stats')
-  if (statsEl) {
-    const lvl       = LEVEL_SEQUENCE.indexOf(run.floorId as typeof LEVEL_SEQUENCE[number]) + 1
-    const floorName = run.floorId.replace('_', ' ')
-    statsEl.innerHTML =
-      `<span class="stat-hp">${run.hp} / ${run.maxHp} HP</span>` +
-      `<span class="stat-floor">${floorName} · ${lvl}/${LEVEL_SEQUENCE.length}</span>` +
-      `<span class="stat-dir">${run.facing.toUpperCase()}</span>`
-  }
+  // Level label on canvas bottom-left
+  const lvl = LEVEL_SEQUENCE.indexOf(run.floorId as typeof LEVEL_SEQUENCE[number]) + 1
+  const label = `Level ${lvl}`
+  ctx.font = 'bold 10px monospace'
+  ctx.textAlign = 'left'
+  const lw = ctx.measureText(label).width
+  ctx.fillStyle = 'rgba(0,0,0,0.55)'
+  ctx.fillRect(2, MAP_H - 14, lw + 8, 13)
+  ctx.fillStyle = '#8b7355'
+  ctx.fillText(label, 6, MAP_H - 4)
 }

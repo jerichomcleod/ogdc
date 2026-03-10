@@ -5,7 +5,7 @@ import { processMovement } from '../systems/movementSystem'
 import { processEnemyTurns, generateEntities } from '../systems/entitySystem'
 import { renderDungeon } from '../engine/renderer'
 import { renderMinimap } from '../ui/minimap'
-import { renderLevelEntry, renderGameOver, renderCombatLog } from '../ui/overlays'
+import { renderLevelEntry, renderGameOver, renderCombatLog, renderHpOverlay } from '../ui/overlays'
 
 export function startLoop(state: GameState): void {
   // Populate the first floor's entities
@@ -62,6 +62,7 @@ function render(state: GameState): void {
   switch (state.mode) {
     case 'dungeon':
       renderDungeon(state)
+      renderHpOverlay(state)
       renderMinimap(state)
       renderCombatLog(state)
       renderLevelEntry(state)
