@@ -2,23 +2,327 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>Wake in the Depths</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #000; display: flex; justify-content: center; align-items: center; min-height: 100vh; overflow: hidden; }
-    #app { display: flex; flex-direction: column; align-items: center; }
-    canvas {
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html {
+      overflow-y: auto;   /* document-level scroll when content is taller than viewport */
+      overflow-x: hidden;
+    }
+
+    body {
+      background: #0a0806;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100svh;   /* fills viewport; never overridden by JS (JS targets #app) */
+      overflow: visible;    /* let html handle scrolling */
+      font-family: 'Courier New', Courier, monospace;
+    }
+
+    /* ── App wrapper — JS sets its width to match the canvas ──── */
+    #app {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;   /* controls inherit the width */
+      flex-shrink: 0;
+    }
+
+    /* ── Game canvas ─────────────────────────────────────────── */
+    canvas#game-canvas {
       display: block;
       image-rendering: pixelated;
       image-rendering: crisp-edges;
+      flex-shrink: 0;
+      max-width: 100%;
+    }
+
+    /* ══════════════════════════════════════════════════════════
+     * Layout tokens — all widths and heights derive from these.
+     *
+     * Wide  (≥ 860 px):  --dpad-btn 64px
+     *   --sw  = 3×64 + 2×5  = 202 px
+     *   --dpad-h = 2×64 + 5 = 133 px
+     *   4 panels: 4×202 + 3×10 + 2×8 = 854 px  ✓ fits at 860 px
+     *
+     * Narrow (< 860 px):  --dpad-btn 52px
+     *   --sw  = 3×52 + 2×5  = 166 px
+     *   --dpad-h = 2×52 + 5 = 109 px
+     *   2×2 grid: 2×166 + 8 + 16 = 356 px  ✓ fits on 375 px+ phones
+     * ══════════════════════════════════════════════════════════ */
+    :root {
+      --dpad-btn:  64px;
+      --dpad-gap:   5px;
+      --sw:    calc(3 * var(--dpad-btn) + 2 * var(--dpad-gap));
+      --dpad-h: calc(2 * var(--dpad-btn) + var(--dpad-gap));
+      --atk-w:     82px;
+      --cg:        10px;   /* gap between panels */
+      --cp:         8px;   /* horizontal padding inside #controls */
+    }
+
+    /* ── Controls panel ──────────────────────────────────────── */
+    #controls {
+      width: 100%;
+      background: #0d0b08;
+      border-top: 1px solid #2a2018;
+      padding: 8px var(--cp) 12px;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    /* Every panel is exactly --sw wide. Heights set explicitly per-panel. */
+    #ctrl-minimap,
+    #ctrl-dpad,
+    #ctrl-actions,
+    #ctrl-log {
+      width: var(--sw);
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+
+    /* ── Shared button base ──────────────────────────────────── */
+    .btn {
+      background: #1c1810;
+      border: 1px solid #3a3028;
+      border-bottom: 3px solid #2e2618;
+      color: #c8a96a;
+      border-radius: 6px;
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      font-family: 'Courier New', Courier, monospace;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 60ms, border-bottom-width 60ms, transform 60ms;
+    }
+    .btn:active, .btn.pressed {
+      background: #2e2818;
+      border-bottom-width: 1px;
+      transform: translateY(2px);
+    }
+
+    /* ── Minimap + stats ─────────────────────────────────────── */
+    #ctrl-minimap {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    #minimap-canvas {
+      display: block;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      border: 1px solid #2a2018;
+    }
+
+    #minimap-stats {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      font-size: 10px;
+      line-height: 1.3;
+    }
+    #minimap-stats .stat-hp    { color: #c8a96a; }
+    #minimap-stats .stat-floor { color: #7a6a50; }
+    #minimap-stats .stat-dir   { color: #5a4a34; }
+
+    /* ── D-pad — explicit cell sizes, no aspect-ratio ────────── */
+    #ctrl-dpad {
+      display: grid;
+      grid-template-columns: repeat(3, var(--dpad-btn));
+      grid-template-rows: repeat(2, var(--dpad-btn));
+      gap: var(--dpad-gap);
+    }
+
+    .btn-dpad {
+      width:  var(--dpad-btn);
+      height: var(--dpad-btn);
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    /* ── Action cluster: [ATTACK wide | 2×2 grid] ────────────── */
+    #ctrl-actions {
+      display: flex;
+      flex-direction: row;
+      gap: 6px;
+      height: var(--dpad-h);   /* explicit — matches the d-pad height */
+    }
+
+    /* ATTACK: full height of the cluster, fixed width */
+    .btn-attack {
+      background: #2a1010;
+      border: 1px solid #6a2828;
+      border-bottom: 4px solid #4a1818;
+      color: #e86060;
+      font-size: 14px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      width:  var(--atk-w);
+      height: 100%;
+      flex-shrink: 0;
+    }
+    .btn-attack:active, .btn-attack.pressed {
+      background: #3a1818;
+      color: #ff8080;
+    }
+
+    /* 2×2 secondary grid fills remaining width at full height */
+    #ctrl-action-grid {
+      flex: 1;
+      min-width: 0;
+      height: 100%;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      gap: 5px;
+    }
+
+    /* USE ITEM — amber */
+    .btn-use {
+      background: #1a1608;
+      border: 1px solid #5a4a18;
+      border-bottom: 3px solid #3a3010;
+      color: #d4a840;
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .btn-use:active, .btn-use.pressed { background: #2a2410; color: #f0c860; }
+
+    /* OPEN/INTERACT — teal */
+    .btn-interact {
+      background: #08181a;
+      border: 1px solid #1a4a50;
+      border-bottom: 3px solid #102e32;
+      color: #40a8b8;
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .btn-interact:active, .btn-interact.pressed { background: #102428; color: #60c8d8; }
+
+    /* MENU / INV — muted */
+    .btn-aux {
+      background: #141210;
+      border: 1px solid #2e2618;
+      border-bottom: 2px solid #201a10;
+      color: #5a4a34;
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .btn-aux:active, .btn-aux.pressed { background: #201c12; color: #8a7a54; }
+
+    /* ── Combat log ──────────────────────────────────────────── */
+    #ctrl-log {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      height: var(--dpad-h);   /* explicit — matches the d-pad height */
+      border: 1px solid #2a2018;
+      padding: 6px 8px;
+    }
+
+    #combat-log {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      font-size: 11px;
+      line-height: 1.4;
+      word-break: break-word;
+      overflow: hidden;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       WIDE LAYOUT  (≥ 860 px) — 4 panels in a single flex row
+       ═══════════════════════════════════════════════════════════ */
+    @media (min-width: 860px) {
+      #controls {
+        display: flex;
+        flex-direction: row;
+        align-items: flex-start;
+        justify-content: center;
+        gap: var(--cg);
+      }
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       NARROW LAYOUT  (< 860 px) — 2×2 fixed-width grid
+         [dpad    | actions]
+         [minimap | log    ]
+       Columns use --sw so panels never grow beyond their defined width.
+       ═══════════════════════════════════════════════════════════ */
+    @media (max-width: 859px) {
+      :root {
+        --dpad-btn: 52px;
+        --atk-w:    62px;
+      }
+
+      #controls {
+        display: grid;
+        grid-template-columns: var(--sw) var(--sw);
+        grid-template-rows: auto auto;
+        justify-content: center;
+        gap: 8px;
+      }
+
+      #ctrl-dpad    { grid-row: 1; grid-column: 1; }
+      #ctrl-actions { grid-row: 1; grid-column: 2; }
+      #ctrl-minimap { grid-row: 2; grid-column: 1; }
+      #ctrl-log     { grid-row: 2; grid-column: 2; }
     }
   </style>
 </head>
 <body>
   <div id="app">
-    <canvas id="game-canvas"></canvas>
+  <canvas id="game-canvas"></canvas>
+
+  <div id="controls">
+
+    <!-- ── Minimap ────────────────────────────────────────── -->
+    <div id="ctrl-minimap">
+      <canvas id="minimap-canvas"></canvas>
+      <div id="minimap-stats">
+        <span class="stat-hp">-- / -- HP</span>
+        <span class="stat-floor">loading…</span>
+        <span class="stat-dir">--</span>
+      </div>
+    </div>
+
+    <!-- ── D-pad ──────────────────────────────────────────── -->
+    <div id="ctrl-dpad">
+      <div></div>
+      <button class="btn btn-dpad" data-action="MOVE_FORWARD">▲</button>
+      <div></div>
+      <button class="btn btn-dpad" data-action="TURN_LEFT">◀</button>
+      <button class="btn btn-dpad" data-action="MOVE_BACK">▼</button>
+      <button class="btn btn-dpad" data-action="TURN_RIGHT">▶</button>
+    </div>
+
+    <!-- ── Action buttons ─────────────────────────────────── -->
+    <div id="ctrl-actions">
+      <button class="btn btn-attack" data-action="ATTACK">⚔ ATTACK</button>
+      <div id="ctrl-action-grid">
+        <button class="btn btn-use"      data-action="USE_ITEM">⚗ USE</button>
+        <button class="btn btn-interact" data-action="INTERACT">✦ OPEN</button>
+        <button class="btn btn-aux"      data-action="CANCEL">MENU</button>
+        <button class="btn btn-aux"      data-action="OPEN_INVENTORY">INV</button>
+      </div>
+    </div>
+
+    <!-- ── Combat log ─────────────────────────────────────── -->
+    <div id="ctrl-log">
+      <div id="combat-log"></div>
+    </div>
+
   </div>
+  </div><!-- #app -->
+
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

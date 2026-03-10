@@ -18,12 +18,22 @@ export function initCanvas(): void {
 }
 
 function scaleToWindow(): void {
-  const scale = Math.min(
-    window.innerWidth / CANVAS_W,
-    window.innerHeight / CANVAS_H
-  )
-  _canvas.style.width = `${CANVAS_W * scale}px`
-  _canvas.style.height = `${CANVAS_H * scale}px`
+  const controls  = document.getElementById('controls')
+  const app       = document.getElementById('app')
+  const controlsH = controls?.offsetHeight ?? 220
+  const availH    = window.innerHeight - controlsH
+  const scale     = Math.min(window.innerWidth / CANVAS_W, availH / CANVAS_H)
+  const clamped   = Math.max(0.4, scale)
+  const cssW = Math.floor(CANVAS_W * clamped)
+  const cssH = Math.floor(CANVAS_H * clamped)
+  _canvas.style.width  = `${cssW}px`
+  _canvas.style.height = `${cssH}px`
+  if (app) {
+    // Keep controls the same width as the scaled canvas
+    app.style.width = `${cssW}px`
+    // Enforce minimum height = canvas + controls; body CSS handles the rest
+    app.style.minHeight = `${cssH + controlsH}px`
+  }
 }
 
 export function getCtx(): CanvasRenderingContext2D {

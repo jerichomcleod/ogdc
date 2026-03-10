@@ -3,6 +3,8 @@ export type Action =
   | 'MOVE_BACK'
   | 'TURN_LEFT'
   | 'TURN_RIGHT'
+  | 'ATTACK'
+  | 'USE_ITEM'
   | 'INTERACT'
   | 'OPEN_INVENTORY'
   | 'OPEN_MAP'
@@ -18,33 +20,36 @@ const KEY_MAP: Record<string, Action> = {
   KeyA:       'TURN_LEFT',
   ArrowRight: 'TURN_RIGHT',
   KeyD:       'TURN_RIGHT',
+  KeyF:       'ATTACK',
+  Space:      'ATTACK',
+  KeyQ:       'USE_ITEM',
   KeyE:       'INTERACT',
-  Space:      'INTERACT',
   KeyI:       'OPEN_INVENTORY',
   KeyM:       'OPEN_MAP',
   Enter:      'CONFIRM',
   Escape:     'CANCEL',
 }
 
-// Pending one-shot actions to be consumed this frame
-const _queue = new Set<Action>()
-
-// Debounce: track when each action was last consumed to prevent key-repeat spam
+const _queue: Set<Action>                          = new Set()
 const _lastConsumed: Partial<Record<Action, number>> = {}
-const MOVE_COOLDOWN_MS = 150
+const COOLDOWN_MS = 150
 
 export function initInput(): void {
   window.addEventListener('keydown', (e) => {
     const action = KEY_MAP[e.code]
     if (!action) return
     e.preventDefault()
-
-    const now = Date.now()
-    const last = _lastConsumed[action] ?? 0
-    if (now - last >= MOVE_COOLDOWN_MS) {
-      _queue.add(action)
-    }
+    fireAction(action)
   })
+}
+
+/** Fire an action directly — used by on-screen buttons. */
+export function fireAction(action: Action): void {
+  const now  = Date.now()
+  const last = _lastConsumed[action] ?? 0
+  if (now - last >= COOLDOWN_MS) {
+    _queue.add(action)
+  }
 }
 
 export function consumeAction(action: Action): boolean {
