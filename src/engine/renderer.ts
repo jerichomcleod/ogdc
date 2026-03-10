@@ -2,284 +2,245 @@ import { getCtx } from './canvas'
 import { GameState } from '../game/gameState'
 import { getCell } from '../systems/mapSystem'
 import { Direction } from '../content/types'
-import { getStone, getFloorTex, getCeilTex } from './assets'
-import {
-  CANVAS_W, DUNGEON_H, HORIZON_Y, VP_X,
-  VIEW_DEPTH, WALL_SCALE, WALL_HALF_W
-} from '../constants'
+import { getStone, getFloorPixels, getCeilPixels } from './assets'
+import { CANVAS_W, DUNGEON_H, HORIZON_Y } from '../constants'
 
-// Screen-space geometry for a wall face at a given depth.
-function faceAt(depth: number) {
-  const halfW = WALL_HALF_W / depth
-  const halfH = WALL_SCALE  / depth
-  return {
-    left:   VP_X - halfW,
-    right:  VP_X + halfW,
-    top:    HORIZON_Y - halfH,
-    bottom: HORIZON_Y + halfH,
+// CAM_PLANE = CANVAS_W / (2 * DUNGEON_H) = 640/640 = 1.0
+// This gives 90° FOV and ensures wall faces are exactly 1:1 square at every depth.
+const CAM_PLANE = CANVAS_W / (2 * DUNGEON_H)   // = 1.0
+const MAX_RAY   = 32
+const SHADE_END = 8   // cells at which wall reaches full darkness
+
+function dirVec(f: Direction): [number, number] {
+  switch (f) {
+    case 'north': return [ 0, -1]
+    case 'south': return [ 0,  1]
+    case 'east':  return [ 1,  0]
+    case 'west':  return [-1,  0]
+  }
+}
+function planeVec(f: Direction): [number, number] {
+  switch (f) {
+    case 'north': return [ CAM_PLANE,  0]
+    case 'south': return [-CAM_PLANE,  0]
+    case 'east':  return [ 0,  CAM_PLANE]
+    case 'west':  return [ 0, -CAM_PLANE]
   }
 }
 
-type Face = ReturnType<typeof faceAt>
-
-// Translate a relative (forward, lateral) grid offset into world coordinates.
-function worldCell(
-  px: number, py: number, facing: Direction,
-  forward: number, lateral: number
-): { x: number; y: number } {
-  switch (facing) {
-    case 'north': return { x: px + lateral, y: py - forward }
-    case 'south': return { x: px - lateral, y: py + forward }
-    case 'east':  return { x: px + forward, y: py + lateral }
-    case 'west':  return { x: px - forward, y: py - lateral }
-  }
+interface Hit {
+  dist:  number
+  wallX: number   // hit offset within wall face, 0..1, left-to-right from player's view
+  side:  0 | 1   // 0 = X-side (E/W wall), 1 = Y-side (N/S wall)
+  mapX:  number
+  mapY:  number
 }
 
-// Draw a textured trapezoid as vertical strips.
-// xStart/xEnd: screen x range. top1/bottom1 at xStart, top2/bottom2 at xEnd.
-// flipSrc: mirrors texture horizontally (for right walls, to be symmetric with left).
-function drawSideStrip(
-  ctx: CanvasRenderingContext2D,
-  img: HTMLImageElement,
-  xStart: number, xEnd: number,
-  top1: number, bottom1: number,
-  top2: number, bottom2: number,
-  flipSrc: boolean,
-): void {
-  if (xEnd <= xStart + 0.5) return
-  const iw = img.naturalWidth  || 640
-  const ih = img.naturalHeight || 640
-  const span = xEnd - xStart
-  const STEP = 2
-  for (let sx = Math.round(xStart); sx < xEnd; sx += STEP) {
-    const t = (sx - xStart) / span
-    const top    = top1    + t * (top2    - top1)
-    const bottom = bottom1 + t * (bottom2 - bottom1)
-    if (bottom <= top) continue
-    const srcT = flipSrc ? 1 - t : t
-    const srcX = Math.min(Math.floor(srcT * iw), iw - 1)
-    // Sample only as many source rows as destination rows for 1:1 height mapping.
-    const colH = bottom - top
-    const srcH = Math.min(ih, colH)
-    const srcY = (ih - colH) > 0 ? Math.floor((ih - colH) / 2) : 0
-    ctx.drawImage(img, srcX, srcY, STEP, srcH, sx, top, STEP, colH)
+function castRay(
+  posX: number, posY: number,
+  rdx:  number, rdy:  number,
+  floorId: string,
+): Hit | null {
+  let mx = Math.floor(posX)
+  let my = Math.floor(posY)
+
+  const ddx = rdx === 0 ? Infinity : Math.abs(1 / rdx)
+  const ddy = rdy === 0 ? Infinity : Math.abs(1 / rdy)
+  const sx  = rdx < 0 ? -1 : 1
+  const sy  = rdy < 0 ? -1 : 1
+  let sdx = rdx < 0 ? (posX - mx) * ddx : (mx + 1 - posX) * ddx
+  let sdy = rdy < 0 ? (posY - my) * ddy : (my + 1 - posY) * ddy
+
+  let side: 0 | 1 = 0
+  for (let i = 0; i < MAX_RAY; i++) {
+    if (sdx < sdy) { sdx += ddx; mx += sx; side = 0 }
+    else           { sdy += ddy; my += sy; side = 1 }
+
+    if (getCell(floorId, mx, my).type !== 'floor') {
+      const dist = side === 0 ? sdx - ddx : sdy - ddy
+      if (dist < 0.0001) return null
+
+      let wallX = side === 0 ? posY + dist * rdy : posX + dist * rdx
+      wallX -= Math.floor(wallX)
+      if (side === 0 && rdx > 0) wallX = 1 - wallX
+      if (side === 1 && rdy < 0) wallX = 1 - wallX
+
+      return { dist, wallX, side, mapX: mx, mapY: my }
+    }
   }
+  return null
 }
 
-// Draw a perspective floor band (horizontal trapezoid below the horizon).
-// Covers y from far.bottom (inner, near horizon) to near.bottom (outer, near player).
-// Each depth band shows one full tile — tiles appear larger closer to the player.
-function drawFloorBand(
-  ctx: CanvasRenderingContext2D,
-  img: HTMLImageElement,
-  far: Face, near: Face | { left: number; right: number; top: number; bottom: number },
-): void {
-  const iw = img.naturalWidth  || 640
-  const ih = img.naturalHeight || 640
-  const yTop    = far.bottom
-  const yBottom = near.bottom
-  if (yBottom <= yTop) return
-  for (let sy = Math.round(yTop); sy < yBottom; sy++) {
-    const t      = (sy - yTop) / (yBottom - yTop)   // 0 = far edge, 1 = near edge
-    const xLeft  = far.left  + t * (near.left  - far.left)
-    const xRight = far.right + t * (near.right - far.right)
-    const w      = xRight - xLeft
-    if (w < 1) continue
-    const srcY = Math.min(Math.floor(t * ih), ih - 1)
-    ctx.drawImage(img, 0, srcY, iw, 1, xLeft, sy, w, 1)
-  }
-}
-
-// Draw a perspective ceiling band (horizontal trapezoid above the horizon).
-// Covers y from near.top (outer, near player) to far.top (inner, near horizon).
-function drawCeilBand(
-  ctx: CanvasRenderingContext2D,
-  img: HTMLImageElement,
-  far: Face, near: Face | { left: number; right: number; top: number; bottom: number },
-): void {
-  const iw = img.naturalWidth  || 640
-  const ih = img.naturalHeight || 640
-  const yTop    = near.top
-  const yBottom = far.top
-  if (yBottom <= yTop) return
-  for (let sy = Math.round(yTop); sy < yBottom; sy++) {
-    const t      = (sy - yTop) / (yBottom - yTop)   // 0 = near edge, 1 = far edge (horizon)
-    const xLeft  = near.left  + t * (far.left  - near.left)
-    const xRight = near.right + t * (far.right - near.right)
-    const w      = xRight - xLeft
-    if (w < 1) continue
-    // Flip srcY so the tile bottom faces the player (near = bottom of texture)
-    const srcY = Math.min(Math.floor((1 - t) * ih), ih - 1)
-    ctx.drawImage(img, 0, srcY, iw, 1, xLeft, sy, w, 1)
-  }
-}
-
-// Core render — called with active facing (may differ during turn animation first half).
-function renderDungeonView(
+// ─────────────────────────────────────────────────────────────────────────────
+// Core view renderer.
+// posX/posY: floating-point world coords (cell centre = integer + 0.5).
+// ─────────────────────────────────────────────────────────────────────────────
+function renderView(
   ctx: CanvasRenderingContext2D,
   floorId: string,
-  px: number, py: number,
+  posX: number, posY: number,
   facing: Direction,
-  offset: number,   // depth offset for forward/back animation
 ): void {
-  const floorTex = getFloorTex(floorId)
-  const ceilTex  = getCeilTex(floorId)
+  const [dx, dy] = dirVec(facing)
+  const [px, py] = planeVec(facing)
 
-  // Pre-scan: find first blocking cell ahead
-  let maxVisible = VIEW_DEPTH
-  for (let d = 1; d <= VIEW_DEPTH; d++) {
-    const fw = worldCell(px, py, facing, d, 0)
-    if (getCell(floorId, fw.x, fw.y).type !== 'floor') { maxVisible = d; break }
-  }
+  // ── Floor and ceiling — scanline raycasting into a single ImageData ────────
+  // We write every pixel of the 640×320 buffer then putImageData once.
+  // Walls are drawn with drawImage ON TOP afterwards, so they're not erased.
 
-  // Draw back → front
-  for (let d = maxVisible; d >= 1; d--) {
-    const effectiveD     = d + offset
-    const effectiveDNear = d - 1 + offset
+  const imgData = ctx.createImageData(CANVAS_W, DUNGEON_H)
+  const out     = new Uint32Array(imgData.data.buffer)
+  out.fill(0xFF000000)   // opaque black default (horizon gap, no-texture fallback)
 
-    const far  = faceAt(effectiveD)
-    const near: Face | { left: number; right: number; top: number; bottom: number } =
-      effectiveDNear < 0.1
-        ? { left: 0, right: CANVAS_W, top: 0, bottom: DUNGEON_H }
-        : faceAt(effectiveDNear)
+  const fPix = getFloorPixels(floorId)
+  const cPix = getCeilPixels(floorId)
 
-    // ── Ceiling band ───────────────────────────────────────────────────────
-    if (ceilTex) {
-      drawCeilBand(ctx, ceilTex, far, near)
-    } else {
-      ctx.fillStyle = '#1a1210'
-      ctx.beginPath()
-      ctx.moveTo(near.left, near.top); ctx.lineTo(near.right, near.top)
-      ctx.lineTo(far.right, far.top); ctx.lineTo(far.left, far.top)
-      ctx.closePath(); ctx.fill()
-    }
+  // Left / right edge ray directions (camera-plane endpoints)
+  const lx = dx - px,  ly = dy - py
+  const rx = dx + px,  ry = dy + py
 
-    // ── Floor band ─────────────────────────────────────────────────────────
-    if (floorTex) {
-      drawFloorBand(ctx, floorTex, far, near)
-    } else {
-      ctx.fillStyle = '#3b2e1a'
-      ctx.beginPath()
-      ctx.moveTo(far.left, far.bottom); ctx.lineTo(far.right, far.bottom)
-      ctx.lineTo(near.right, near.bottom); ctx.lineTo(near.left, near.bottom)
-      ctx.closePath(); ctx.fill()
-    }
-
-    // ── Left side wall ─────────────────────────────────────────────────────
-    const leftWorld = worldCell(px, py, facing, d - 1, -1)
-    if (getCell(floorId, leftWorld.x, leftWorld.y).type !== 'floor') {
-      const tex = getStone(leftWorld.x, leftWorld.y)
-      if (tex) {
-        drawSideStrip(ctx, tex,
-          near.left, far.left,
-          near.top, near.bottom,
-          far.top,  far.bottom,
-          false)
-      } else {
-        ctx.fillStyle = '#4a3d2c'
-        ctx.beginPath()
-        ctx.moveTo(near.left, near.top); ctx.lineTo(far.left, far.top)
-        ctx.lineTo(far.left, far.bottom); ctx.lineTo(near.left, near.bottom)
-        ctx.closePath(); ctx.fill()
-      }
-    }
-
-    // ── Right side wall ────────────────────────────────────────────────────
-    const rightWorld = worldCell(px, py, facing, d - 1, 1)
-    if (getCell(floorId, rightWorld.x, rightWorld.y).type !== 'floor') {
-      const tex = getStone(rightWorld.x, rightWorld.y)
-      if (tex) {
-        drawSideStrip(ctx, tex,
-          far.right, near.right,
-          far.top,   far.bottom,
-          near.top,  near.bottom,
-          true)
-      } else {
-        ctx.fillStyle = '#5a4c36'
-        ctx.beginPath()
-        ctx.moveTo(near.right, near.top); ctx.lineTo(far.right, far.top)
-        ctx.lineTo(far.right, far.bottom); ctx.lineTo(near.right, near.bottom)
-        ctx.closePath(); ctx.fill()
-      }
-    }
-
-    // ── Front wall ─────────────────────────────────────────────────────────
-    const frontWorld = worldCell(px, py, facing, d, 0)
-    const frontCell  = getCell(floorId, frontWorld.x, frontWorld.y)
-    if (frontCell.type !== 'floor') {
-      const isDoor = frontCell.wallOverride === 'door_closed'
-                  || frontCell.wallOverride === 'door_locked'
-      if (isDoor) {
-        ctx.fillStyle = '#7a4a20'
-        ctx.fillRect(far.left, far.top, far.right - far.left, far.bottom - far.top)
-      } else {
-        const tex = getStone(frontWorld.x, frontWorld.y)
-        if (tex) {
-          ctx.drawImage(tex, far.left, far.top, far.right - far.left, far.bottom - far.top)
-        } else {
-          ctx.fillStyle = '#6b5a42'
-          ctx.fillRect(far.left, far.top, far.right - far.left, far.bottom - far.top)
-        }
+  // Floor  (y > HORIZON_Y)
+  if (fPix) {
+    const { pixels: fp, w: fw, h: fh } = fPix
+    for (let y = HORIZON_Y + 1; y < DUNGEON_H; y++) {
+      // rowDist: distance to the floor plane at screen row y.
+      // Standard formula: posZ / (y - horizon), posZ = HORIZON_Y (half screen height).
+      const rowDist = HORIZON_Y / (y - HORIZON_Y)
+      let   fx = posX + rowDist * lx,  fy = posY + rowDist * ly
+      const sx = rowDist * (rx - lx) / CANVAS_W
+      const sy = rowDist * (ry - ly) / CANVAS_W
+      const row = y * CANVAS_W
+      for (let x = 0; x < CANVAS_W; x++) {
+        const tx = ((Math.floor(fx * fw) % fw) + fw) % fw
+        const ty = ((Math.floor(fy * fh) % fh) + fh) % fh
+        out[row + x] = fp[ty * fw + tx]
+        fx += sx; fy += sy
       }
     }
   }
 
-  // Faint horizon line
-  ctx.strokeStyle = '#ffffff14'
-  ctx.lineWidth = 1
+  // Ceiling  (y < HORIZON_Y) — identical formula, mirrored
+  if (cPix) {
+    const { pixels: cp, w: cw, h: ch } = cPix
+    for (let y = 0; y < HORIZON_Y; y++) {
+      const rowDist = HORIZON_Y / (HORIZON_Y - y)
+      let   fx = posX + rowDist * lx,  fy = posY + rowDist * ly
+      const sx = rowDist * (rx - lx) / CANVAS_W
+      const sy = rowDist * (ry - ly) / CANVAS_W
+      const row = y * CANVAS_W
+      for (let x = 0; x < CANVAS_W; x++) {
+        const tx = ((Math.floor(fx * cw) % cw) + cw) % cw
+        const ty = ((Math.floor(fy * ch) % ch) + ch) % ch
+        out[row + x] = cp[ty * cw + tx]
+        fx += sx; fy += sy
+      }
+    }
+  }
+
+  ctx.putImageData(imgData, 0, 0)
+
+  // ── Walls — one DDA ray per screen column, drawn with drawImage ────────────
+  // Using drawImage (not putImageData) means only the wall strip pixels change;
+  // floor/ceiling pixels outside the strip are untouched.
+
+  for (let x = 0; x < CANVAS_W; x++) {
+    const camX = 2 * x / CANVAS_W - 1   // −1 (left) … +1 (right)
+    const hit  = castRay(posX, posY, dx + px * camX, dy + py * camX, floorId)
+    if (!hit) continue
+
+    const { dist, wallX, side, mapX, mapY } = hit
+
+    const lineH     = DUNGEON_H / dist
+    const drawStart = HORIZON_Y - lineH / 2
+
+    const img = getStone(mapX, mapY)
+    if (img) {
+      const tw = img.naturalWidth  || 640
+      const th = img.naturalHeight || 640
+
+      // Horizontal: sample the exact column of the texture corresponding to wallX.
+      const texCol = Math.max(0, Math.min(Math.floor(wallX * tw), tw - 1))
+
+      // Vertical: 1:1 pixel mapping — sample as many source rows as dest rows.
+      // Centre the crop in the texture so all detail is visible at all distances.
+      const srcH  = Math.min(th, Math.ceil(lineH))
+      const srcY0 = Math.max(0, Math.floor((th - lineH) / 2))
+
+      // Draw texture strip. Canvas clips drawStart/drawEnd to screen bounds.
+      ctx.drawImage(img, texCol, srcY0, 1, srcH, x, drawStart, 1, lineH)
+    } else {
+      // Fallback: flat shaded colour
+      const v = Math.floor(120 * Math.max(0, 1 - dist / SHADE_END))
+      ctx.fillStyle = `rgb(${v},${Math.floor(v * 0.84)},${Math.floor(v * 0.62)})`
+      ctx.fillRect(x, drawStart, 1, lineH)
+    }
+
+    // Distance + side shading overlay (Y-side walls slightly darker for depth cues)
+    const sideBonus = side === 1 ? 0.12 : 0
+    const shade = Math.min(0.88, Math.max(0, (dist - 0.5) / SHADE_END) + sideBonus)
+    if (shade > 0.02) {
+      ctx.fillStyle = `rgba(0,0,0,${shade.toFixed(2)})`
+      ctx.fillRect(x, drawStart, 1, lineH)
+    }
+  }
+
+  // Faint horizon rule
+  ctx.strokeStyle = '#ffffff18'
+  ctx.lineWidth   = 1
   ctx.beginPath()
   ctx.moveTo(0, HORIZON_Y)
   ctx.lineTo(CANVAS_W, HORIZON_Y)
   ctx.stroke()
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Public entry point — handles animation state then calls renderView.
+// ─────────────────────────────────────────────────────────────────────────────
 export function renderDungeon(state: GameState): void {
-  const ctx     = getCtx()
-  const run     = state.run
-  const anim    = run.anim
-  const { x: px, y: py } = run.position
+  const ctx  = getCtx()
+  const run  = state.run
+  const anim = run.anim
 
-  let offset       = 0
-  let activeFacing = run.facing
-  let translateX   = 0
+  let posX   = run.position.x + 0.5
+  let posY   = run.position.y + 0.5
+  let facing = run.facing
+  let translateX = 0
 
   if (anim) {
     const t = Math.min(1, (performance.now() - anim.startMs) / anim.durationMs)
+
     if (anim.type === 'forward' || anim.type === 'back') {
-      // Ease-out quadratic: scene starts one cell displaced, eases to final position
-      const ease = (1 - t) * (1 - t)
-      offset = anim.type === 'forward' ? ease : -ease
+      const [fdx, fdy] = dirVec(run.facing)
+      const ease   = (1 - t) * (1 - t)
+      const offset = anim.type === 'forward' ? ease : -ease
+      posX -= fdx * offset
+      posY -= fdy * offset
+
     } else {
-      // Directional slide: turn right → old view exits LEFT, new view enters from RIGHT
-      // dir = +1 for right, -1 for left
+      // Directional slide: turn right → old exits left, new enters from right
       const dir = anim.type === 'turn_right' ? 1 : -1
       if (t < 0.5) {
-        // Exit phase: old view slides out opposite to turn direction (ease-in)
-        const p = t / 0.5
-        translateX   = -dir * p * p * CANVAS_W
-        activeFacing = anim.prevFacing
+        const p    = t / 0.5
+        translateX = -dir * p * p * CANVAS_W
+        facing     = anim.prevFacing
       } else {
-        // Enter phase: new view slides in from turn direction (ease-out)
-        const p = (t - 0.5) / 0.5
-        const eased  = 1 - (1 - p) * (1 - p)
-        translateX   = dir * (1 - eased) * CANVAS_W
-        activeFacing = run.facing
+        const p     = (t - 0.5) / 0.5
+        const eased = 1 - (1 - p) * (1 - p)
+        translateX  = dir * (1 - eased) * CANVAS_W
       }
     }
   }
 
-  // Black void — visible as side bars during turn slide and as the horizon gap.
   ctx.fillStyle = '#000'
   ctx.fillRect(0, 0, CANVAS_W, DUNGEON_H)
 
   ctx.save()
-  // Clip to dungeon area so turn slides don't bleed into the HUD
   ctx.beginPath()
   ctx.rect(0, 0, CANVAS_W, DUNGEON_H)
   ctx.clip()
   if (translateX !== 0) ctx.translate(translateX, 0)
 
-  renderDungeonView(ctx, run.floorId, px, py, activeFacing, offset)
+  renderView(ctx, run.floorId, posX, posY, facing)
 
   ctx.restore()
 }
