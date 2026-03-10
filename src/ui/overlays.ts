@@ -1,6 +1,6 @@
 import { getCtx } from '../engine/canvas'
 import { GameState } from '../game/gameState'
-import { CANVAS_W, CANVAS_H, DUNGEON_H } from '../constants'
+import { CANVAS_W, CANVAS_H } from '../constants'
 
 // ── Level entry text ──────────────────────────────────────────────────────────
 
@@ -45,13 +45,13 @@ export function renderLevelEntry(state: GameState): void {
   ctx.save()
   ctx.globalAlpha = alpha * 0.82
   ctx.fillStyle   = '#000'
-  ctx.fillRect(0, 0, CANVAS_W, DUNGEON_H)
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H)
   ctx.globalAlpha = alpha
 
   ctx.textAlign    = 'center'
   ctx.fillStyle    = '#d4b87a'
   ctx.font         = 'bold 22px monospace'
-  ctx.fillText(texts[0], CANVAS_W / 2, DUNGEON_H / 2 - 18)
+  ctx.fillText(texts[0], CANVAS_W / 2, CANVAS_H / 2 - 18)
 
   ctx.fillStyle = '#8a7a60'
   ctx.font      = '13px monospace'
@@ -59,7 +59,7 @@ export function renderLevelEntry(state: GameState): void {
   const subtitle = texts[1]
   const lines    = wrapText(subtitle, 58)
   lines.forEach((line, i) => {
-    ctx.fillText(line, CANVAS_W / 2, DUNGEON_H / 2 + 10 + i * 18)
+    ctx.fillText(line, CANVAS_W / 2, CANVAS_H / 2 + 10 + i * 18)
   })
   ctx.restore()
 }
@@ -101,24 +101,22 @@ export function renderGameOver(state: GameState): void {
   ctx.fillText(`Reached: ${floorLabel}`, CANVAS_W / 2, CANVAS_H / 2 + 60)
 }
 
-// ── Combat log (rendered in HUD area) ────────────────────────────────────────
+// ── Combat log (updates HTML #combat-log element) ────────────────────────────
 
 export function renderCombatLog(state: GameState): void {
-  if (!state.run.combatLog.length) return
-  const ctx = getCtx()
-  ctx.save()
-  ctx.font      = '11px monospace'
-  ctx.textAlign = 'left'
-  const log    = state.run.combatLog
-  const startY = DUNGEON_H + 20
-  for (let i = 0; i < log.length; i++) {
-    const age   = log.length - 1 - i          // 0 = newest
-    const alpha = 1 - age * 0.22
-    ctx.globalAlpha = Math.max(0.2, alpha)
-    ctx.fillStyle   = age === 0 ? '#e8c97a' : '#8a7a5a'
-    ctx.fillText(log[i], 8, startY + (log.length - 1 - i) * 15)
-  }
-  ctx.restore()
+  const logEl = document.getElementById('combat-log')
+  if (!logEl) return
+  const log = state.run.combatLog
+  if (!log.length) return
+  // Render newest last (bottom) — same order as before
+  logEl.innerHTML = log
+    .map((msg, i) => {
+      const age     = log.length - 1 - i  // 0 = newest
+      const opacity = Math.max(0.25, 1 - age * 0.22).toFixed(2)
+      const color   = age === 0 ? '#e8c97a' : '#8a7a5a'
+      return `<div style="opacity:${opacity};color:${color}">${msg}</div>`
+    })
+    .join('')
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

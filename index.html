@@ -18,138 +18,98 @@
       font-family: 'Courier New', Courier, monospace;
     }
 
-    #app {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      width: 100%;
-      max-width: 640px;
-    }
-
-    canvas {
+    /* ── Canvas ──────────────────────────────────────────────── */
+    canvas#game-canvas {
       display: block;
       image-rendering: pixelated;
       image-rendering: crisp-edges;
       flex-shrink: 0;
+      max-width: 100%;
     }
 
-    /* ── Controls panel ───────────────────────────────── */
+    /* ── Controls panel ──────────────────────────────────────── */
     #controls {
       width: 100%;
       background: #0d0b08;
       border-top: 1px solid #2a2018;
       padding: 8px 10px 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
       user-select: none;
       -webkit-user-select: none;
     }
 
-    /* ── Top bar: ancillary small buttons ─────────────── */
-    #ctrl-bar {
-      display: flex;
-      gap: 6px;
-      align-items: center;
-    }
-    #ctrl-bar-spacer { flex: 1; }
-
-    .btn-aux {
-      background: #181410;
-      border: 1px solid #3a2e20;
-      color: #6a5a40;
-      font: 11px/1 'Courier New', monospace;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      padding: 6px 10px;
-      border-radius: 4px;
+    /* ── Shared button base ──────────────────────────────────── */
+    .btn {
+      background: #1c1810;
+      border: 1px solid #3a3028;
+      border-bottom: 3px solid #2e2618;
+      color: #c8a96a;
+      border-radius: 6px;
       cursor: pointer;
       touch-action: manipulation;
       -webkit-tap-highlight-color: transparent;
-      transition: background 80ms, color 80ms;
-    }
-    .btn-aux:active, .btn-aux.pressed {
-      background: #2a2018;
-      color: #c8a96a;
-    }
-
-    /* ── Main row: d-pad + actions ────────────────────── */
-    #ctrl-main {
+      font-family: 'Courier New', Courier, monospace;
       display: flex;
-      gap: 10px;
       align-items: center;
-      justify-content: space-between;
+      justify-content: center;
+      transition: background 60ms, border-bottom-width 60ms, transform 60ms;
+    }
+    .btn:active, .btn.pressed {
+      background: #2e2818;
+      border-bottom-width: 1px;
+      transform: translateY(2px);
+    }
+    .btn:active > *, .btn.pressed > * { pointer-events: none; }
+
+    /* ── Minimap + stats ─────────────────────────────────────── */
+    #ctrl-minimap {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      flex-shrink: 0;
     }
 
-    /* ── D-pad ────────────────────────────────────────── */
+    #minimap-canvas {
+      display: block;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      border: 1px solid #2a2018;
+    }
+
+    #minimap-stats {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      font-size: 10px;
+      line-height: 1.3;
+      color: #6a5a40;
+    }
+    #minimap-stats .stat-hp    { color: #c8a96a; }
+    #minimap-stats .stat-floor { color: #7a6a50; }
+    #minimap-stats .stat-dir   { color: #5a4a34; }
+
+    /* ── D-pad ───────────────────────────────────────────────── */
     #ctrl-dpad {
       display: grid;
-      grid-template-columns: repeat(3, 72px);
-      grid-template-rows: repeat(3, 72px);
+      grid-template-columns: repeat(3, var(--btn-size));
+      grid-template-rows:    repeat(2, var(--btn-size));
       gap: 4px;
       flex-shrink: 0;
     }
 
     .btn-dpad {
-      background: #1c1810;
-      border: 1px solid #3a3028;
-      border-bottom: 3px solid #2e2618;
-      color: #c8a96a;
-      font-size: 22px;
+      width:  var(--btn-size);
+      height: var(--btn-size);
+      font-size: 20px;
       line-height: 1;
-      border-radius: 8px;
-      cursor: pointer;
-      touch-action: manipulation;
-      -webkit-tap-highlight-color: transparent;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 72px;
-      height: 72px;
-      transition: background 60ms, border-bottom-width 60ms, transform 60ms;
-    }
-    .btn-dpad:active, .btn-dpad.pressed {
-      background: #2e2818;
-      border-bottom-width: 1px;
-      transform: translateY(2px);
     }
 
-    /* D-pad center marker */
-    .dpad-center {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #2a2418;
-      font-size: 28px;
-    }
-
-    /* ── Action buttons (right side) ──────────────────── */
+    /* ── Action column ───────────────────────────────────────── */
     #ctrl-actions {
-      flex: 1;
       display: flex;
       flex-direction: column;
-      gap: 8px;
-      min-width: 0;
-    }
-
-    .btn-action {
-      border-radius: 8px;
-      cursor: pointer;
-      touch-action: manipulation;
-      -webkit-tap-highlight-color: transparent;
-      font-family: 'Courier New', Courier, monospace;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      font-weight: bold;
-      display: flex;
-      align-items: center;
-      justify-content: center;
       gap: 6px;
-      transition: background 60ms, border-bottom-width 60ms, transform 60ms;
-    }
-    .btn-action:active, .btn-action.pressed {
-      border-bottom-width: 1px !important;
-      transform: translateY(2px);
+      flex-shrink: 0;
+      min-width: 0;
     }
 
     /* ATTACK — large, red */
@@ -158,8 +118,11 @@
       border: 1px solid #6a2828;
       border-bottom: 4px solid #4a1818;
       color: #e86060;
-      font-size: 20px;
-      height: 76px;
+      font-size: 18px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      height: var(--btn-attack-h);
       width: 100%;
     }
     .btn-attack:active, .btn-attack.pressed {
@@ -167,88 +130,169 @@
       color: #ff8080;
     }
 
-    /* Secondary actions row */
-    #ctrl-action-row2 {
+    /* Secondary button row */
+    .btn-row {
       display: flex;
-      gap: 8px;
+      gap: 6px;
     }
 
-    /* USE ITEM — medium, amber */
+    /* USE ITEM — amber */
     .btn-use {
       background: #1a1608;
       border: 1px solid #5a4a18;
       border-bottom: 3px solid #3a3010;
       color: #d4a840;
-      font-size: 13px;
-      height: 60px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      height: var(--btn-sec-h);
       flex: 1;
     }
-    .btn-use:active, .btn-use.pressed {
-      background: #2a2410;
-      color: #f0c860;
-    }
+    .btn-use:active, .btn-use.pressed { background: #2a2410; color: #f0c860; }
 
-    /* INTERACT — medium, teal */
+    /* INTERACT — teal */
     .btn-interact {
       background: #08181a;
       border: 1px solid #1a4a50;
       border-bottom: 3px solid #102e32;
       color: #40a8b8;
-      font-size: 13px;
-      height: 60px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      height: var(--btn-sec-h);
       flex: 1;
     }
-    .btn-interact:active, .btn-interact.pressed {
-      background: #102428;
-      color: #60c8d8;
+    .btn-interact:active, .btn-interact.pressed { background: #102428; color: #60c8d8; }
+
+    /* MENU / INVENTORY — muted */
+    .btn-aux {
+      background: #141210;
+      border: 1px solid #2e2618;
+      border-bottom: 2px solid #201a10;
+      color: #5a4a34;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      height: var(--btn-aux-h);
+      flex: 1;
+    }
+    .btn-aux:active, .btn-aux.pressed { background: #201c12; color: #8a7a54; }
+
+    /* ── Combat log ──────────────────────────────────────────── */
+    #ctrl-log {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      min-height: 60px;
+      min-width: 0;
+    }
+
+    #combat-log {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      font-size: 11px;
+      line-height: 1.4;
+      word-break: break-word;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       WIDE LAYOUT  (≥ 560 px — landscape phone, tablet, desktop)
+       Controls: single flex row  [minimap | dpad | actions | log]
+       ═══════════════════════════════════════════════════════════ */
+    @media (min-width: 560px) {
+      :root {
+        --btn-size:     64px;
+        --btn-attack-h: 72px;
+        --btn-sec-h:    52px;
+        --btn-aux-h:    38px;
+      }
+
+      #controls {
+        display: flex;
+        flex-direction: row;
+        align-items: flex-start;
+        gap: 12px;
+      }
+
+      #ctrl-log { flex: 1; }
+
+      #ctrl-actions { width: 180px; }
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       NARROW LAYOUT  (< 560 px — portrait phone)
+       Controls: 2×2 grid
+         [dpad    | actions]
+         [minimap | log    ]
+       ═══════════════════════════════════════════════════════════ */
+    @media (max-width: 559px) {
+      :root {
+        --btn-size:     58px;
+        --btn-attack-h: 64px;
+        --btn-sec-h:    46px;
+        --btn-aux-h:    34px;
+      }
+
+      #controls {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        grid-template-rows: auto auto;
+        gap: 8px;
+      }
+
+      #ctrl-dpad    { grid-row: 1; grid-column: 1; }
+      #ctrl-actions { grid-row: 1; grid-column: 2; }
+      #ctrl-minimap { grid-row: 2; grid-column: 1; }
+      #ctrl-log     { grid-row: 2; grid-column: 2; align-self: end; }
     }
   </style>
 </head>
 <body>
-  <div id="app">
-    <canvas id="game-canvas"></canvas>
+  <canvas id="game-canvas"></canvas>
 
-    <div id="controls">
+  <div id="controls">
 
-      <!-- Top bar: ancillary buttons -->
-      <div id="ctrl-bar">
-        <button class="btn-aux" data-action="OPEN_MAP">MAP</button>
-        <button class="btn-aux" data-action="CANCEL">MENU</button>
-        <div id="ctrl-bar-spacer"></div>
-        <button class="btn-aux" data-action="OPEN_INVENTORY">INVENTORY</button>
-        <button class="btn-aux" data-action="CONFIRM">CONFIRM</button>
-      </div>
-
-      <!-- Main row -->
-      <div id="ctrl-main">
-
-        <!-- Left: D-Pad -->
-        <div id="ctrl-dpad">
-          <!-- Row 1 -->
-          <div></div>
-          <button class="btn-dpad" data-action="MOVE_FORWARD">▲</button>
-          <div></div>
-          <!-- Row 2 -->
-          <button class="btn-dpad" data-action="TURN_LEFT">◀</button>
-          <div class="dpad-center">✛</div>
-          <button class="btn-dpad" data-action="TURN_RIGHT">▶</button>
-          <!-- Row 3 -->
-          <div></div>
-          <button class="btn-dpad" data-action="MOVE_BACK">▼</button>
-          <div></div>
-        </div>
-
-        <!-- Right: Action buttons -->
-        <div id="ctrl-actions">
-          <button class="btn-action btn-attack" data-action="ATTACK">⚔ ATTACK</button>
-          <div id="ctrl-action-row2">
-            <button class="btn-action btn-use"      data-action="USE_ITEM">⚗ USE ITEM</button>
-            <button class="btn-action btn-interact"  data-action="INTERACT">✦ INTERACT</button>
-          </div>
-        </div>
-
+    <!-- ── Minimap ────────────────────────────────────────── -->
+    <div id="ctrl-minimap">
+      <canvas id="minimap-canvas"></canvas>
+      <div id="minimap-stats">
+        <span class="stat-hp">-- / -- HP</span>
+        <span class="stat-floor">loading…</span>
+        <span class="stat-dir">--</span>
       </div>
     </div>
+
+    <!-- ── D-pad ──────────────────────────────────────────── -->
+    <div id="ctrl-dpad">
+      <!-- Row 1: only FORWARD in centre -->
+      <div></div>
+      <button class="btn btn-dpad" data-action="MOVE_FORWARD">▲</button>
+      <div></div>
+      <!-- Row 2: LEFT  BACK  RIGHT -->
+      <button class="btn btn-dpad" data-action="TURN_LEFT">◀</button>
+      <button class="btn btn-dpad" data-action="MOVE_BACK">▼</button>
+      <button class="btn btn-dpad" data-action="TURN_RIGHT">▶</button>
+    </div>
+
+    <!-- ── Action buttons ─────────────────────────────────── -->
+    <div id="ctrl-actions">
+      <button class="btn btn-attack" data-action="ATTACK">⚔ ATTACK</button>
+      <div class="btn-row">
+        <button class="btn btn-use"      data-action="USE_ITEM">⚗ USE ITEM</button>
+        <button class="btn btn-interact" data-action="INTERACT">✦ OPEN</button>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-aux" data-action="CANCEL">MENU</button>
+        <button class="btn btn-aux" data-action="OPEN_INVENTORY">INV</button>
+      </div>
+    </div>
+
+    <!-- ── Combat log ─────────────────────────────────────── -->
+    <div id="ctrl-log">
+      <div id="combat-log"></div>
+    </div>
+
   </div>
 
   <script type="module" src="/src/main.ts"></script>
