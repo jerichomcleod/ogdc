@@ -18,12 +18,13 @@ export function initCanvas(): void {
 }
 
 function scaleToWindow(): void {
-  const scale = Math.min(
-    window.innerWidth / CANVAS_W,
-    window.innerHeight / CANVAS_H
-  )
-  _canvas.style.width = `${CANVAS_W * scale}px`
-  _canvas.style.height = `${CANVAS_H * scale}px`
+  const controls   = document.getElementById('controls')
+  const controlsH  = controls?.offsetHeight ?? 260
+  const availH     = window.innerHeight - controlsH
+  const scale      = Math.min(window.innerWidth / CANVAS_W, availH / CANVAS_H)
+  const clamped    = Math.max(0.4, scale)
+  _canvas.style.width  = `${Math.floor(CANVAS_W * clamped)}px`
+  _canvas.style.height = `${Math.floor(CANVAS_H * clamped)}px`
 }
 
 export function getCtx(): CanvasRenderingContext2D {

@@ -21,10 +21,11 @@ export interface RunState {
   floorFlags:   Record<string, boolean>
   anim:         CamAnim | null
   enemies:      EnemyInstance[]
-  items:        ItemInstance[]
-  combatLog:    string[]      // last 4 events, newest last
-  levelEntryMs: number        // performance.now() when floor was entered
-  playerActed:  boolean       // set true when player takes a turn action
+  items:        ItemInstance[]    // items on the floor
+  inventory:    ItemInstance[]    // items carried by the player
+  combatLog:    string[]          // last 4 events, newest last
+  levelEntryMs: number            // performance.now() when floor was entered
+  playerActed:  boolean           // set true when player takes a turn action
 }
 
 export type GameMode = 'dungeon' | 'game_over'
@@ -58,6 +59,7 @@ function makeRunState(floorId: LevelId, hp: number, maxHp: number): RunState {
     anim:         null,
     enemies:      [],
     items:        [],
+    inventory:    [],
     combatLog:    [],
     levelEntryMs: performance.now(),
     playerActed:  false,
@@ -76,7 +78,7 @@ export function makeInitialState(): GameState {
   }
 }
 
-/** Advance to the next level, preserving HP. After the last level resets the world. */
+/** Advance to the next level, preserving HP and inventory. After the last level resets the world. */
 export function advanceLevel(state: GameState): void {
   const next = state.levelIndex + 1
   if (next >= LEVEL_SEQUENCE.length) {
@@ -87,6 +89,7 @@ export function advanceLevel(state: GameState): void {
   } else {
     state.levelIndex = next
   }
-  const { hp, maxHp } = state.run
-  state.run = makeRunState(LEVEL_SEQUENCE[state.levelIndex], hp, maxHp)
+  const { hp, maxHp, inventory } = state.run
+  state.run           = makeRunState(LEVEL_SEQUENCE[state.levelIndex], hp, maxHp)
+  state.run.inventory = inventory
 }

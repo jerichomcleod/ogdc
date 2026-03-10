@@ -2,23 +2,255 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>Wake in the Depths</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #000; display: flex; justify-content: center; align-items: center; min-height: 100vh; overflow: hidden; }
-    #app { display: flex; flex-direction: column; align-items: center; }
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0a0806;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100dvh;
+      overflow-x: hidden;
+      overflow-y: auto;
+      font-family: 'Courier New', Courier, monospace;
+    }
+
+    #app {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      max-width: 640px;
+    }
+
     canvas {
       display: block;
       image-rendering: pixelated;
       image-rendering: crisp-edges;
+      flex-shrink: 0;
+    }
+
+    /* ── Controls panel ───────────────────────────────── */
+    #controls {
+      width: 100%;
+      background: #0d0b08;
+      border-top: 1px solid #2a2018;
+      padding: 8px 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    /* ── Top bar: ancillary small buttons ─────────────── */
+    #ctrl-bar {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    #ctrl-bar-spacer { flex: 1; }
+
+    .btn-aux {
+      background: #181410;
+      border: 1px solid #3a2e20;
+      color: #6a5a40;
+      font: 11px/1 'Courier New', monospace;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 6px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      transition: background 80ms, color 80ms;
+    }
+    .btn-aux:active, .btn-aux.pressed {
+      background: #2a2018;
+      color: #c8a96a;
+    }
+
+    /* ── Main row: d-pad + actions ────────────────────── */
+    #ctrl-main {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* ── D-pad ────────────────────────────────────────── */
+    #ctrl-dpad {
+      display: grid;
+      grid-template-columns: repeat(3, 72px);
+      grid-template-rows: repeat(3, 72px);
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    .btn-dpad {
+      background: #1c1810;
+      border: 1px solid #3a3028;
+      border-bottom: 3px solid #2e2618;
+      color: #c8a96a;
+      font-size: 22px;
+      line-height: 1;
+      border-radius: 8px;
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 72px;
+      height: 72px;
+      transition: background 60ms, border-bottom-width 60ms, transform 60ms;
+    }
+    .btn-dpad:active, .btn-dpad.pressed {
+      background: #2e2818;
+      border-bottom-width: 1px;
+      transform: translateY(2px);
+    }
+
+    /* D-pad center marker */
+    .dpad-center {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #2a2418;
+      font-size: 28px;
+    }
+
+    /* ── Action buttons (right side) ──────────────────── */
+    #ctrl-actions {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .btn-action {
+      border-radius: 8px;
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      font-family: 'Courier New', Courier, monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: background 60ms, border-bottom-width 60ms, transform 60ms;
+    }
+    .btn-action:active, .btn-action.pressed {
+      border-bottom-width: 1px !important;
+      transform: translateY(2px);
+    }
+
+    /* ATTACK — large, red */
+    .btn-attack {
+      background: #2a1010;
+      border: 1px solid #6a2828;
+      border-bottom: 4px solid #4a1818;
+      color: #e86060;
+      font-size: 20px;
+      height: 76px;
+      width: 100%;
+    }
+    .btn-attack:active, .btn-attack.pressed {
+      background: #3a1818;
+      color: #ff8080;
+    }
+
+    /* Secondary actions row */
+    #ctrl-action-row2 {
+      display: flex;
+      gap: 8px;
+    }
+
+    /* USE ITEM — medium, amber */
+    .btn-use {
+      background: #1a1608;
+      border: 1px solid #5a4a18;
+      border-bottom: 3px solid #3a3010;
+      color: #d4a840;
+      font-size: 13px;
+      height: 60px;
+      flex: 1;
+    }
+    .btn-use:active, .btn-use.pressed {
+      background: #2a2410;
+      color: #f0c860;
+    }
+
+    /* INTERACT — medium, teal */
+    .btn-interact {
+      background: #08181a;
+      border: 1px solid #1a4a50;
+      border-bottom: 3px solid #102e32;
+      color: #40a8b8;
+      font-size: 13px;
+      height: 60px;
+      flex: 1;
+    }
+    .btn-interact:active, .btn-interact.pressed {
+      background: #102428;
+      color: #60c8d8;
     }
   </style>
 </head>
 <body>
   <div id="app">
     <canvas id="game-canvas"></canvas>
+
+    <div id="controls">
+
+      <!-- Top bar: ancillary buttons -->
+      <div id="ctrl-bar">
+        <button class="btn-aux" data-action="OPEN_MAP">MAP</button>
+        <button class="btn-aux" data-action="CANCEL">MENU</button>
+        <div id="ctrl-bar-spacer"></div>
+        <button class="btn-aux" data-action="OPEN_INVENTORY">INVENTORY</button>
+        <button class="btn-aux" data-action="CONFIRM">CONFIRM</button>
+      </div>
+
+      <!-- Main row -->
+      <div id="ctrl-main">
+
+        <!-- Left: D-Pad -->
+        <div id="ctrl-dpad">
+          <!-- Row 1 -->
+          <div></div>
+          <button class="btn-dpad" data-action="MOVE_FORWARD">▲</button>
+          <div></div>
+          <!-- Row 2 -->
+          <button class="btn-dpad" data-action="TURN_LEFT">◀</button>
+          <div class="dpad-center">✛</div>
+          <button class="btn-dpad" data-action="TURN_RIGHT">▶</button>
+          <!-- Row 3 -->
+          <div></div>
+          <button class="btn-dpad" data-action="MOVE_BACK">▼</button>
+          <div></div>
+        </div>
+
+        <!-- Right: Action buttons -->
+        <div id="ctrl-actions">
+          <button class="btn-action btn-attack" data-action="ATTACK">⚔ ATTACK</button>
+          <div id="ctrl-action-row2">
+            <button class="btn-action btn-use"      data-action="USE_ITEM">⚗ USE ITEM</button>
+            <button class="btn-action btn-interact"  data-action="INTERACT">✦ INTERACT</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
   </div>
+
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

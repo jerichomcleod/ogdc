@@ -171,21 +171,41 @@ export function playerAttack(run: RunState, tx: number, ty: number): boolean {
 
 // ── Item pickup ───────────────────────────────────────────────────────────────
 
-/** Pick up an item at (x, y) if present. Returns true if consumed. */
+/** Pick up an item at (x, y) into inventory. Returns true if picked up. */
 export function tryPickupItem(run: RunState, x: number, y: number): boolean {
   const idx = run.items.findIndex(it => it.x === x && it.y === y)
   if (idx === -1) return false
 
-  const item = run.items[idx]
+  const item = run.items.splice(idx, 1)[0]
   const def  = getItemDef(item.defKey)
-  if (!def) return false
+  run.inventory.push(item)
+  pushCombatLog(run, `Picked up ${def?.name ?? 'item'}.`)
+  return true
+}
 
-  if (def.effect === 'heal') {
-    const healed = Math.min(def.value, run.maxHp - run.hp)
-    run.hp += healed
-    pushCombatLog(run, `You drink the ${def.name}. +${healed} HP.`)
+/** Use the best healing item in inventory. Returns true if an item was used. */
+export function useItem(run: RunState): boolean {
+  if (!run.inventory.length) {
+    pushCombatLog(run, 'No items to use.')
+    return false
   }
-
-  run.items.splice(idx, 1)
+  // Find best heal item
+  let bestIdx = -1, bestVal = 0
+  for (let i = 0; i < run.inventory.length; i++) {
+    const def = getItemDef(run.inventory[i].defKey)
+    if (def && def.effect === 'heal' && def.value > bestVal) {
+      bestVal = def.value
+      bestIdx = i
+    }
+  }
+  if (bestIdx === -1) {
+    pushCombatLog(run, 'Nothing usable.')
+    return false
+  }
+  const item   = run.inventory.splice(bestIdx, 1)[0]
+  const def    = getItemDef(item.defKey)!
+  const healed = Math.min(def.value, run.maxHp - run.hp)
+  run.hp      += healed
+  pushCombatLog(run, `Used ${def.name}. +${healed} HP. (${run.hp}/${run.maxHp})`)
   return true
 }
