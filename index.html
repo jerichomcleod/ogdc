@@ -7,14 +7,18 @@
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
+    html {
+      overflow-y: auto;   /* document-level scroll when content is taller than viewport */
+      overflow-x: hidden;
+    }
+
     body {
       background: #0a0806;
       display: flex;
       flex-direction: column;
       align-items: center;
-      min-height: 100dvh;
-      overflow-x: hidden;
-      overflow-y: auto;
+      min-height: 100svh;   /* fills viewport; never overridden by JS (JS targets #app) */
+      overflow: visible;    /* let html handle scrolling */
       font-family: 'Courier New', Courier, monospace;
     }
 

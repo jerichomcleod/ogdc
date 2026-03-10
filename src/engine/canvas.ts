@@ -28,10 +28,12 @@ function scaleToWindow(): void {
   const cssH = Math.floor(CANVAS_H * clamped)
   _canvas.style.width  = `${cssW}px`
   _canvas.style.height = `${cssH}px`
-  // Keep controls the same width as the scaled canvas
-  if (app) app.style.width = `${cssW}px`
-  // Prevent vertical layout from collapsing below canvas + controls
-  document.body.style.minHeight = `${cssH + controlsH + 20}px`
+  if (app) {
+    // Keep controls the same width as the scaled canvas
+    app.style.width = `${cssW}px`
+    // Enforce minimum height = canvas + controls; body CSS handles the rest
+    app.style.minHeight = `${cssH + controlsH}px`
+  }
 }
 
 export function getCtx(): CanvasRenderingContext2D {
