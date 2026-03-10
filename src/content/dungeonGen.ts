@@ -246,7 +246,7 @@ interface RasterResult {
   exitY:  number
 }
 
-function rasterize(graph: DunGraph, positions: Map<number, RoomPos>): RasterResult {
+function rasterize(graph: DunGraph, positions: Map<number, RoomPos>, r: () => number): RasterResult {
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
   for (const { rx, ry } of positions.values()) {
     if (rx < minX) minX = rx; if (rx > maxX) maxX = rx
@@ -308,11 +308,29 @@ function rasterize(graph: DunGraph, positions: Map<number, RoomPos>): RasterResu
   const sp = positions.get(graph.start)!
   const ep = positions.get(graph.end)!
 
-  return {
-    cells, width: cellW, height: cellH,
-    spawnX: toCx(sp.rx), spawnY: toCy(sp.ry),
-    exitX:  toCx(ep.rx), exitY:  toCy(ep.ry),
+  const spawnX = toCx(sp.rx), spawnY = toCy(sp.ry)
+  const exitX  = toCx(ep.rx), exitY  = toCy(ep.ry)
+
+  // ── Place doors at corridor chokepoints (~25% chance) ────────────────────
+  // A chokepoint is a floor cell with exactly two cardinal floor neighbours
+  // that are directly opposite (N+S or E+W) — a pinch-point in a corridor.
+  for (let y = 1; y < cellH - 1; y++) {
+    for (let x = 1; x < cellW - 1; x++) {
+      if (cells[y][x].type !== 'floor') continue
+      if (x === spawnX && y === spawnY) continue
+      if (x === exitX  && y === exitY)  continue
+      const n = cells[y - 1][x].type === 'floor'
+      const s = cells[y + 1][x].type === 'floor'
+      const e = cells[y][x + 1].type === 'floor'
+      const w = cells[y][x - 1].type === 'floor'
+      const isChokepoint = (n && s && !e && !w) || (!n && !s && e && w)
+      if (isChokepoint && r() < 0.25) {
+        cells[y][x] = { type: 'wall', wallOverride: 'door_closed' }
+      }
+    }
   }
+
+  return { cells, width: cellW, height: cellH, spawnX, spawnY, exitX, exitY }
 }
 
 // ── Public entry point ────────────────────────────────────────────────────────
@@ -321,7 +339,7 @@ export function generateFloor(id: string, theme: FloorTheme, seed: number): Floo
   const r     = makeRng(seed)
   const graph = buildGraph(r)
   const pos   = layoutGraph(graph, r)
-  const rast  = rasterize(graph, pos)
+  const rast  = rasterize(graph, pos, r)
 
   return {
     id,

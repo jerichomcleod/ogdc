@@ -15,6 +15,7 @@ import { getCell } from '../systems/mapSystem'
 import { Direction } from '../content/types'
 import { getWallPixels, getFloorPixels, getCeilPixels } from './assets'
 import { getFloor } from '../content/floors'
+import { getEnemyDef, getItemDef } from '../content/defs'
 import { CANVAS_W, DUNGEON_H, HORIZON_Y } from '../constants'
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -119,26 +120,32 @@ function shade(px: number, s: number): number {
 
 // ── Core render ──────────────────────────────────────────────────────────────
 
+export interface Sprite {
+  wx:     number   // world X (cell centre = x + 0.5)
+  wy:     number   // world Y
+  color:  number   // packed Uint32
+  scaleH: number   // height as fraction of wall face at same distance (1 = full)
+  offY:   number   // vertical offset as fraction (+ = down toward floor)
+}
+
+// Pre-allocated z-buffer (one entry per screen column, filled each wall pass)
+const _zBuf = new Float32Array(CANVAS_W)
+
 /**
  * Write every pixel of a CANVAS_W × DUNGEON_H frame into `out`.
  *
- * Pass 1 — floor & ceiling:
- *   For each scanline, compute the real-world floor/ceiling coordinate that
- *   maps to that screen row using standard perspective maths, sample the
- *   texture, write the pixel.
- *
- * Pass 2 — walls:
- *   For each screen column, cast a DDA ray.  For each pixel in the
- *   resulting wall strip, sample the texture at the correct 1:1 UV and
- *   overwrite the floor/ceiling pixel already sitting there.
+ * Pass 1 — floor & ceiling scanlines.
+ * Pass 2 — walls (DDA ray cast); fills _zBuf with perpendicular depth.
+ * Pass 3 — sprites (enemies / items), z-buffered against walls.
  */
 function renderToBuffer(
-  out:    Uint32Array,
+  out:     Uint32Array,
   floorId: string,
-  theme:  string,
-  posX:   number,
-  posY:   number,
-  facing: Direction,
+  theme:   string,
+  posX:    number,
+  posY:    number,
+  facing:  Direction,
+  sprites: Sprite[],
 ): void {
   const [dx, dy] = dirVec(facing)
   const [px, py] = planeVec(facing)
@@ -146,90 +153,66 @@ function renderToBuffer(
   const floorPix = getFloorPixels(floorId)
   const ceilPix  = getCeilPixels(floorId)
 
-  // Camera-plane endpoints — used to compute per-scanline ray directions.
-  const lx = dx - px,  ly = dy - py   // leftmost ray
-  const rx = dx + px,  ry = dy + py   // rightmost ray
+  const lx = dx - px,  ly = dy - py
+  const rx = dx + px,  ry = dy + py
 
-  // ── Pass 1 : floor and ceiling ──────────────────────────────────────────
+  // ── Pass 1 : floor and ceiling ───────────────────────────────────────────
   for (let y = 0; y < DUNGEON_H; y++) {
     const row = y * CANVAS_W
-
-    if (y === HORIZON_Y) {
-      // Black gap at the exact horizon line.
-      out.fill(0xFF000000, row, row + CANVAS_W)
-      continue
-    }
+    if (y === HORIZON_Y) { out.fill(0xFF000000, row, row + CANVAS_W); continue }
 
     const isFloor = y > HORIZON_Y
-
-    // rowDist: distance to the floor/ceiling plane at this screen row.
-    // Derived from: eyeHeight (= 0.5) / projected_y_fraction.
-    // eyeHeight * DUNGEON_H = HORIZON_Y, so rowDist = HORIZON_Y / |y - HORIZON_Y|.
-    const rowDist = isFloor
-      ? HORIZON_Y / (y - HORIZON_Y)
-      : HORIZON_Y / (HORIZON_Y - y)
-
-    const src = isFloor ? floorPix : ceilPix
+    const rowDist = isFloor ? HORIZON_Y / (y - HORIZON_Y) : HORIZON_Y / (HORIZON_Y - y)
+    const src     = isFloor ? floorPix : ceilPix
 
     if (src) {
       const { pixels, w, h } = src
-      // World position at the left edge of this scanline.
       let fx = posX + rowDist * lx
       let fy = posY + rowDist * ly
-      // Step per pixel: interpolate between left and right ray endpoints.
       const stepX = rowDist * (rx - lx) / CANVAS_W
       const stepY = rowDist * (ry - ly) / CANVAS_W
-
       for (let x = 0; x < CANVAS_W; x++, fx += stepX, fy += stepY) {
-        // Tile the world coordinate into [0, w) and [0, h).
         const tx = ((Math.floor(fx * w) % w) + w) % w
         const ty = ((Math.floor(fy * h) % h) + h) % h
         out[row + x] = pixels[ty * w + tx]
       }
     } else {
-      // Fallback solid colour — dark brown floor, near-black ceiling.
       out.fill(isFloor ? rgba(45, 35, 20) : rgba(18, 12, 10), row, row + CANVAS_W)
     }
   }
 
   // ── Pass 2 : walls ────────────────────────────────────────────────────────
+  _zBuf.fill(MAX_RAY)
+
   for (let x = 0; x < CANVAS_W; x++) {
-    const camX = 2 * x / CANVAS_W - 1           // −1 (left) … +1 (right)
+    const camX = 2 * x / CANVAS_W - 1
     const hit  = castRay(posX, posY, dx + px * camX, dy + py * camX, floorId)
     if (!hit) continue
 
     const { dist, wallX, side, mapX, mapY } = hit
+    _zBuf[x] = dist
 
-    // Wall strip geometry.
-    const lineH   = DUNGEON_H / dist             // face height (= face width, square)
-    const wallTop = HORIZON_Y - lineH / 2        // top of strip in screen space
-
-    // Pixel rows to actually write (clamped to the dungeon viewport).
+    const lineH   = DUNGEON_H / dist
+    const wallTop = HORIZON_Y - lineH / 2
     const pixTop    = Math.max(0, Math.ceil(wallTop))
     const pixBottom = Math.min(DUNGEON_H - 1, Math.floor(wallTop + lineH))
     if (pixBottom < pixTop) continue
 
-    // Distance shading: 0 = full brightness, 1 = black.
-    // Y-side walls receive a small extra darkening for a cheap lighting cue.
     const darkFactor = Math.min(1, dist / SHADE_END + (side === 1 ? 0.10 : 0))
 
-    const tex = getWallPixels(mapX, mapY, theme)
+    // Door tint: warm amber overlay
+    const cellOver = getCell(floorId, mapX, mapY).wallOverride
+    const isDoor   = cellOver === 'door_closed' || cellOver === 'door_locked'
 
-    // 1:1 texture sampling — show a lineH × lineH crop from the centre of
-    // the texture, matching the square face size at this distance.
-    // When lineH > texture dimension we show the whole texture (close walls).
-    const tw = tex ? tex.w : 1
-    const th = tex ? tex.h : 1
-
-    // Standard UV: wallX (0–1 across face) → texture column.
-    // Stable — does not shift with distance.
+    const tex    = getWallPixels(mapX, mapY, theme)
+    const tw     = tex ? tex.w : 1
+    const th     = tex ? tex.h : 1
     const texCol = tex ? Math.max(0, Math.min(tw - 1, Math.floor(wallX * tw))) : 0
 
     for (let y = pixTop; y <= pixBottom; y++) {
       let px32: number
 
       if (tex) {
-        // Standard UV: strip fraction (0–1 top→bottom) → texture row.
         const stripFrac = (y - wallTop) / lineH
         const texRow    = Math.max(0, Math.min(th - 1, Math.floor(stripFrac * th)))
         px32 = shade(tex.pixels[texRow * tw + texCol], darkFactor)
@@ -238,7 +221,53 @@ function renderToBuffer(
         px32 = rgba(v, Math.floor(v * 0.85), Math.floor(v * 0.62))
       }
 
+      if (isDoor) {
+        // Amber tint: boost R, reduce G, suppress B
+        const r8 = Math.min(255, Math.floor(( px32        & 0xFF) * 1.1))
+        const g8 =                Math.floor(((px32 >>  8) & 0xFF) * 0.65)
+        const b8 =                Math.floor(((px32 >> 16) & 0xFF) * 0.35)
+        px32 = 0xFF000000 | r8 | (g8 << 8) | (b8 << 16)
+      }
+
       out[y * CANVAS_W + x] = px32
+    }
+  }
+
+  // ── Pass 3 : sprites ──────────────────────────────────────────────────────
+  if (!sprites.length) return
+
+  // Inverse camera matrix (invDet = 1 since CAM_PLANE = 1)
+  const invDet = 1 / (px * dy - dx * py)
+
+  // Sort back-to-front so overlapping sprites paint correctly
+  const sorted = sprites
+    .map(s => {
+      const relX = s.wx - posX, relY = s.wy - posY
+      return { s, relX, relY, dist2: relX * relX + relY * relY }
+    })
+    .sort((a, b) => b.dist2 - a.dist2)
+
+  for (const { s, relX, relY } of sorted) {
+    const tX =  invDet * ( dy * relX -  dx * relY)  // horizontal in camera space
+    const tZ =  invDet * (-py * relX +  px * relY)  // depth (positive = in front)
+    if (tZ <= 0.1) continue
+
+    const screenCX = Math.floor(CANVAS_W / 2 * (1 + tX / tZ))
+    const faceH    = DUNGEON_H / tZ                       // face height at this depth
+    const sprH     = Math.floor(faceH * s.scaleH)
+    const sprW     = sprH
+
+    const screenCY = HORIZON_Y + Math.floor(faceH * s.offY)
+    const drawT    = Math.max(0,          screenCY - sprH / 2)
+    const drawB    = Math.min(DUNGEON_H - 1, screenCY + sprH / 2)
+    const drawL    = Math.max(0,          screenCX - sprW / 2)
+    const drawR    = Math.min(CANVAS_W - 1, screenCX + sprW / 2)
+
+    for (let sx = drawL; sx <= drawR; sx++) {
+      if (tZ >= _zBuf[sx]) continue  // behind wall
+      for (let sy = drawT; sy <= drawB; sy++) {
+        out[sy * CANVAS_W + sx] = s.color
+      }
     }
   }
 }
@@ -276,6 +305,20 @@ export function renderDungeon(state: GameState): void {
   const run   = state.run
   const anim  = run.anim
   const theme = getFloor(run.floorId)?.theme ?? 'stone'
+
+  // Build sprite list from enemies + items on the current floor
+  const sprites: Sprite[] = [
+    ...run.enemies.map(e => ({
+      wx: e.x + 0.5, wy: e.y + 0.5,
+      color: (getEnemyDef(e.defKey)?.color ?? 0xFF00FFFF),
+      scaleH: 0.75, offY: 0,
+    })),
+    ...run.items.map(it => ({
+      wx: it.x + 0.5, wy: it.y + 0.5,
+      color: (getItemDef(it.defKey)?.color ?? 0xFF00FF00),
+      scaleH: 0.28, offY: 0.35,
+    })),
+  ]
 
   let posX   = run.position.x + 0.5
   let posY   = run.position.y + 0.5
@@ -320,12 +363,12 @@ export function renderDungeon(state: GameState): void {
   if (isTurn) {
     // Render into the offscreen buffer, blit to main canvas with x-offset.
     const [offCtx, offData, offBuf] = getOff()
-    renderToBuffer(offBuf, run.floorId, theme, posX, posY, facing)
+    renderToBuffer(offBuf, run.floorId, theme, posX, posY, facing, sprites)
     offCtx.putImageData(offData, 0, 0)
     ctx.drawImage(_offCanvas!, Math.round(slideX), 0)
   } else {
     // Render directly into the pre-allocated buffer, one putImageData call.
-    renderToBuffer(_outBuf, run.floorId, theme, posX, posY, facing)
+    renderToBuffer(_outBuf, run.floorId, theme, posX, posY, facing, sprites)
     ctx.putImageData(_imgData, 0, 0)
   }
 }
