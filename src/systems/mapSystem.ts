@@ -11,8 +11,9 @@ export function getCell(floorId: string, x: number, y: number): Cell {
 
 export function isPassable(floorId: string, x: number, y: number): boolean {
   const cell = getCell(floorId, x, y)
-  if (cell.type !== 'floor') return false
-  return true
+  if (cell.type === 'floor')  return true
+  if (cell.type === 'wall')   return cell.wallOverride === 'door_open'
+  return false
 }
 
 export function stepOffset(facing: Direction): { dx: number; dy: number } {
