@@ -158,8 +158,13 @@ function renderView(
       const tw = img.naturalWidth  || 640
       const th = img.naturalHeight || 640
 
-      // Horizontal: sample the exact column of the texture corresponding to wallX.
-      const texCol = Math.max(0, Math.min(Math.floor(wallX * tw), tw - 1))
+      // Horizontal 1:1 — sample a lineH-wide strip centred in the texture,
+      // matching the same logic as the vertical crop (srcY0 / srcH).
+      // At dist=1 (lineH=320, tw=640): shows centre 320 px (cols 160–480).
+      // At dist=0.5 (lineH=640): shows the full texture.
+      // At dist=2 (lineH=160): shows the centre 160 px.
+      const texCol = Math.max(0, Math.min(tw - 1,
+        Math.floor((tw - lineH) / 2 + wallX * lineH)))
 
       // Vertical: 1:1 pixel mapping — sample as many source rows as dest rows.
       // Centre the crop in the texture so all detail is visible at all distances.
