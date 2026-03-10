@@ -4,24 +4,26 @@ import { LEVEL_SEQUENCE } from '../content/floors'
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const CELL   = 8     // pixels per map cell in the HTML minimap canvas
-const VIEW_W = 20    // cells wide  → MAP_W = 160px
-const VIEW_H = 13    // cells tall  → MAP_H = 104px
+const CELL   = 5     // px per cell — smaller = more map visible
+const VIEW_W = 30    // cells wide  → MAP_W = 150 px
+const VIEW_H = 20    // cells tall  → MAP_H = 100 px
 const MAP_W  = VIEW_W * CELL
 const MAP_H  = VIEW_H * CELL
 
 const C_WALL       = '#2a2318'
 const C_FLOOR      = '#8b7355'
 const C_UNEXPLORED = '#0e0d0b'
-const C_PLAYER     = '#e8c97a'
+const C_PLAYER     = '#e8c97a'   // neutral warm amber
 const C_EXIT       = '#4ab87a'
 const C_DOOR       = '#8a5a20'
+const C_ENEMY      = '#e84040'   // red for enemy diamonds
 
+// Sharper, more elongated directional arrows
 const ARROWS: Record<string, [number, number][]> = {
-  north: [ [0,-2], [ 2, 1], [-2, 1] ],
-  south: [ [0, 2], [ 2,-1], [-2,-1] ],
-  east:  [ [2, 0], [-1,-2], [-1, 2] ],
-  west:  [ [-2,0], [ 1,-2], [ 1, 2] ],
+  north: [ [0, -3],   [ 2,  2.5], [-2,  2.5] ],
+  south: [ [0,  3],   [ 2, -2.5], [-2, -2.5] ],
+  east:  [ [3,  0],   [-2, -2.5], [-2,  2.5] ],
+  west:  [ [-3, 0],   [ 2, -2.5], [ 2,  2.5] ],
 }
 
 // ── Canvas context (lazy-initialised) ─────────────────────────────────────────
@@ -58,6 +60,7 @@ export function renderMinimap(state: GameState): void {
   ctx.fillStyle = '#0a0905'
   ctx.fillRect(0, 0, MAP_W, MAP_H)
 
+  // Cells
   for (let vy = 0; vy < viewH; vy++) {
     for (let vx = 0; vx < viewW; vx++) {
       const mx = startX + vx
@@ -85,9 +88,28 @@ export function renderMinimap(state: GameState): void {
     }
   }
 
-  // Player marker
-  const mpx = (px - startX) * CELL + CELL / 2
-  const mpy = (py - startY) * CELL + CELL / 2
+  // Enemy diamonds — only on revealed cells within the viewport
+  ctx.fillStyle = C_ENEMY
+  for (const enemy of run.enemies) {
+    const vx = enemy.x - startX
+    const vy = enemy.y - startY
+    if (vx < 0 || vx >= viewW || vy < 0 || vy >= viewH) continue
+    if (!run.mapRevealed[enemy.y]?.[enemy.x]) continue
+    const ex = vx * CELL + CELL / 2
+    const ey = vy * CELL + CELL / 2
+    const r  = Math.max(1.5, CELL / 2 - 0.5)
+    ctx.beginPath()
+    ctx.moveTo(ex,     ey - r)
+    ctx.lineTo(ex + r, ey)
+    ctx.lineTo(ex,     ey + r)
+    ctx.lineTo(ex - r, ey)
+    ctx.closePath()
+    ctx.fill()
+  }
+
+  // Player arrow
+  const mpx   = (px - startX) * CELL + CELL / 2
+  const mpy   = (py - startY) * CELL + CELL / 2
   const arrow = ARROWS[run.facing]
   ctx.fillStyle = C_PLAYER
   ctx.beginPath()
@@ -97,7 +119,7 @@ export function renderMinimap(state: GameState): void {
   ctx.closePath()
   ctx.fill()
 
-  // Update HTML stats
+  // HTML stats
   const statsEl = document.getElementById('minimap-stats')
   if (statsEl) {
     const lvl       = LEVEL_SEQUENCE.indexOf(run.floorId as typeof LEVEL_SEQUENCE[number]) + 1

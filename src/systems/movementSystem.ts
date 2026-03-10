@@ -28,7 +28,7 @@ export function processMovement(state: GameState): void {
   } else if (consumeAction('MOVE_FORWARD')) {
     const { dx, dy } = stepOffset(run.facing)
     const nx = run.position.x + dx, ny = run.position.y + dy
-    if (isPassable(run.floorId, nx, ny)) {
+    if (isPassable(run.floorId, nx, ny) && !run.enemies.some(e => e.x === nx && e.y === ny)) {
       const prev      = run.facing
       run.position.x  = nx
       run.position.y  = ny
@@ -43,7 +43,7 @@ export function processMovement(state: GameState): void {
   } else if (consumeAction('MOVE_BACK')) {
     const { dx, dy } = stepOffset(run.facing)
     const nx = run.position.x - dx, ny = run.position.y - dy
-    if (isPassable(run.floorId, nx, ny)) {
+    if (isPassable(run.floorId, nx, ny) && !run.enemies.some(e => e.x === nx && e.y === ny)) {
       const prev      = run.facing
       run.position.x  = nx
       run.position.y  = ny

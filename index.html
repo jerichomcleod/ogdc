@@ -7,16 +7,6 @@
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
-    /* ── Section width: all four panels are this wide ────────── */
-    :root {
-      --sw:         160px;   /* section width — every panel matches this  */
-      --ctrl-gap:    10px;   /* gap between panels                        */
-      --dpad-gap:     4px;   /* gap between d-pad buttons                 */
-      --btn-attack-h: 68px;
-      --btn-sec-h:    46px;
-      --btn-aux-h:    32px;
-    }
-
     body {
       background: #0a0806;
       display: flex;
@@ -28,6 +18,14 @@
       font-family: 'Courier New', Courier, monospace;
     }
 
+    /* ── App wrapper — JS sets its width to match the canvas ──── */
+    #app {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;   /* controls inherit the width */
+      flex-shrink: 0;
+    }
+
     /* ── Game canvas ─────────────────────────────────────────── */
     canvas#game-canvas {
       display: block;
@@ -37,23 +35,47 @@
       max-width: 100%;
     }
 
+    /* ══════════════════════════════════════════════════════════
+     * Layout tokens — all widths and heights derive from these.
+     *
+     * Wide  (≥ 860 px):  --dpad-btn 64px
+     *   --sw  = 3×64 + 2×5  = 202 px
+     *   --dpad-h = 2×64 + 5 = 133 px
+     *   4 panels: 4×202 + 3×10 + 2×8 = 854 px  ✓ fits at 860 px
+     *
+     * Narrow (< 860 px):  --dpad-btn 52px
+     *   --sw  = 3×52 + 2×5  = 166 px
+     *   --dpad-h = 2×52 + 5 = 109 px
+     *   2×2 grid: 2×166 + 8 + 16 = 356 px  ✓ fits on 375 px+ phones
+     * ══════════════════════════════════════════════════════════ */
+    :root {
+      --dpad-btn:  64px;
+      --dpad-gap:   5px;
+      --sw:    calc(3 * var(--dpad-btn) + 2 * var(--dpad-gap));
+      --dpad-h: calc(2 * var(--dpad-btn) + var(--dpad-gap));
+      --atk-w:     82px;
+      --cg:        10px;   /* gap between panels */
+      --cp:         8px;   /* horizontal padding inside #controls */
+    }
+
     /* ── Controls panel ──────────────────────────────────────── */
     #controls {
       width: 100%;
       background: #0d0b08;
       border-top: 1px solid #2a2018;
-      padding: 8px 10px 12px;
+      padding: 8px var(--cp) 12px;
       user-select: none;
       -webkit-user-select: none;
     }
 
-    /* Every panel is --sw wide */
+    /* Every panel is exactly --sw wide. Heights set explicitly per-panel. */
     #ctrl-minimap,
     #ctrl-dpad,
     #ctrl-actions,
     #ctrl-log {
       width: var(--sw);
       flex-shrink: 0;
+      overflow: hidden;
     }
 
     /* ── Shared button base ──────────────────────────────────── */
@@ -103,46 +125,56 @@
     #minimap-stats .stat-floor { color: #7a6a50; }
     #minimap-stats .stat-dir   { color: #5a4a34; }
 
-    /* ── D-pad ───────────────────────────────────────────────── */
-    /* 3 equal columns filling --sw; buttons square via aspect-ratio */
+    /* ── D-pad — explicit cell sizes, no aspect-ratio ────────── */
     #ctrl-dpad {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      grid-template-rows: auto auto;
+      grid-template-columns: repeat(3, var(--dpad-btn));
+      grid-template-rows: repeat(2, var(--dpad-btn));
       gap: var(--dpad-gap);
     }
 
     .btn-dpad {
-      aspect-ratio: 1 / 1;
+      width:  var(--dpad-btn);
+      height: var(--dpad-btn);
       font-size: 18px;
       line-height: 1;
     }
 
-    /* ── Action column ───────────────────────────────────────── */
+    /* ── Action cluster: [ATTACK wide | 2×2 grid] ────────────── */
     #ctrl-actions {
       display: flex;
-      flex-direction: column;
+      flex-direction: row;
       gap: 6px;
+      height: var(--dpad-h);   /* explicit — matches the d-pad height */
     }
 
-    /* ATTACK — large, red */
+    /* ATTACK: full height of the cluster, fixed width */
     .btn-attack {
       background: #2a1010;
       border: 1px solid #6a2828;
       border-bottom: 4px solid #4a1818;
       color: #e86060;
-      font-size: 17px;
+      font-size: 14px;
       font-weight: bold;
       text-transform: uppercase;
-      letter-spacing: 0.1em;
-      height: var(--btn-attack-h);
-      width: 100%;
+      letter-spacing: 0.08em;
+      width:  var(--atk-w);
+      height: 100%;
+      flex-shrink: 0;
     }
-    .btn-attack:active, .btn-attack.pressed { background: #3a1818; color: #ff8080; }
+    .btn-attack:active, .btn-attack.pressed {
+      background: #3a1818;
+      color: #ff8080;
+    }
 
-    /* Secondary button rows */
-    .btn-row {
-      display: flex;
+    /* 2×2 secondary grid fills remaining width at full height */
+    #ctrl-action-grid {
+      flex: 1;
+      min-width: 0;
+      height: 100%;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
       gap: 5px;
     }
 
@@ -152,11 +184,9 @@
       border: 1px solid #5a4a18;
       border-bottom: 3px solid #3a3010;
       color: #d4a840;
-      font-size: 10px;
+      font-size: 9px;
       text-transform: uppercase;
-      letter-spacing: 0.06em;
-      height: var(--btn-sec-h);
-      flex: 1;
+      letter-spacing: 0.04em;
     }
     .btn-use:active, .btn-use.pressed { background: #2a2410; color: #f0c860; }
 
@@ -166,11 +196,9 @@
       border: 1px solid #1a4a50;
       border-bottom: 3px solid #102e32;
       color: #40a8b8;
-      font-size: 10px;
+      font-size: 9px;
       text-transform: uppercase;
-      letter-spacing: 0.06em;
-      height: var(--btn-sec-h);
-      flex: 1;
+      letter-spacing: 0.04em;
     }
     .btn-interact:active, .btn-interact.pressed { background: #102428; color: #60c8d8; }
 
@@ -180,11 +208,9 @@
       border: 1px solid #2e2618;
       border-bottom: 2px solid #201a10;
       color: #5a4a34;
-      font-size: 10px;
+      font-size: 9px;
       text-transform: uppercase;
-      letter-spacing: 0.06em;
-      height: var(--btn-aux-h);
-      flex: 1;
+      letter-spacing: 0.04em;
     }
     .btn-aux:active, .btn-aux.pressed { background: #201c12; color: #8a7a54; }
 
@@ -193,7 +219,7 @@
       display: flex;
       flex-direction: column;
       justify-content: flex-end;
-      overflow: hidden;
+      height: var(--dpad-h);   /* explicit — matches the d-pad height */
       border: 1px solid #2a2018;
       padding: 6px 8px;
     }
@@ -209,43 +235,47 @@
     }
 
     /* ═══════════════════════════════════════════════════════════
-       WIDE LAYOUT  —  all 4 panels in a single row
-       Kicks in when viewport ≥ 4×--sw + 3×gap + panel padding
-       4×160 + 3×10 + 20 = 690px  →  breakpoint: 700px
+       WIDE LAYOUT  (≥ 860 px) — 4 panels in a single flex row
        ═══════════════════════════════════════════════════════════ */
-    @media (min-width: 700px) {
+    @media (min-width: 860px) {
       #controls {
         display: flex;
         flex-direction: row;
-        align-items: stretch;
+        align-items: flex-start;
         justify-content: center;
-        gap: var(--ctrl-gap);
+        gap: var(--cg);
       }
     }
 
     /* ═══════════════════════════════════════════════════════════
-       NARROW LAYOUT  —  2 × 2 grid
+       NARROW LAYOUT  (< 860 px) — 2×2 fixed-width grid
          [dpad    | actions]
          [minimap | log    ]
+       Columns use --sw so panels never grow beyond their defined width.
        ═══════════════════════════════════════════════════════════ */
-    @media (max-width: 699px) {
+    @media (max-width: 859px) {
+      :root {
+        --dpad-btn: 52px;
+        --atk-w:    62px;
+      }
+
       #controls {
         display: grid;
         grid-template-columns: var(--sw) var(--sw);
         grid-template-rows: auto auto;
-        align-items: start;
         justify-content: center;
-        gap: var(--ctrl-gap);
+        gap: 8px;
       }
 
       #ctrl-dpad    { grid-row: 1; grid-column: 1; }
       #ctrl-actions { grid-row: 1; grid-column: 2; }
       #ctrl-minimap { grid-row: 2; grid-column: 1; }
-      #ctrl-log     { grid-row: 2; grid-column: 2; align-self: stretch; }
+      #ctrl-log     { grid-row: 2; grid-column: 2; }
     }
   </style>
 </head>
 <body>
+  <div id="app">
   <canvas id="game-canvas"></canvas>
 
   <div id="controls">
@@ -262,11 +292,9 @@
 
     <!-- ── D-pad ──────────────────────────────────────────── -->
     <div id="ctrl-dpad">
-      <!-- Row 1: only FORWARD in centre -->
       <div></div>
       <button class="btn btn-dpad" data-action="MOVE_FORWARD">▲</button>
       <div></div>
-      <!-- Row 2: LEFT  BACK  RIGHT -->
       <button class="btn btn-dpad" data-action="TURN_LEFT">◀</button>
       <button class="btn btn-dpad" data-action="MOVE_BACK">▼</button>
       <button class="btn btn-dpad" data-action="TURN_RIGHT">▶</button>
@@ -275,13 +303,11 @@
     <!-- ── Action buttons ─────────────────────────────────── -->
     <div id="ctrl-actions">
       <button class="btn btn-attack" data-action="ATTACK">⚔ ATTACK</button>
-      <div class="btn-row">
-        <button class="btn btn-use"      data-action="USE_ITEM">⚗ USE ITEM</button>
+      <div id="ctrl-action-grid">
+        <button class="btn btn-use"      data-action="USE_ITEM">⚗ USE</button>
         <button class="btn btn-interact" data-action="INTERACT">✦ OPEN</button>
-      </div>
-      <div class="btn-row">
-        <button class="btn btn-aux" data-action="CANCEL">MENU</button>
-        <button class="btn btn-aux" data-action="OPEN_INVENTORY">INV</button>
+        <button class="btn btn-aux"      data-action="CANCEL">MENU</button>
+        <button class="btn btn-aux"      data-action="OPEN_INVENTORY">INV</button>
       </div>
     </div>
 
@@ -291,6 +317,7 @@
     </div>
 
   </div>
+  </div><!-- #app -->
 
   <script type="module" src="/src/main.ts"></script>
 </body>

@@ -18,13 +18,20 @@ export function initCanvas(): void {
 }
 
 function scaleToWindow(): void {
-  const controls   = document.getElementById('controls')
-  const controlsH  = controls?.offsetHeight ?? 260
-  const availH     = window.innerHeight - controlsH
-  const scale      = Math.min(window.innerWidth / CANVAS_W, availH / CANVAS_H)
-  const clamped    = Math.max(0.4, scale)
-  _canvas.style.width  = `${Math.floor(CANVAS_W * clamped)}px`
-  _canvas.style.height = `${Math.floor(CANVAS_H * clamped)}px`
+  const controls  = document.getElementById('controls')
+  const app       = document.getElementById('app')
+  const controlsH = controls?.offsetHeight ?? 220
+  const availH    = window.innerHeight - controlsH
+  const scale     = Math.min(window.innerWidth / CANVAS_W, availH / CANVAS_H)
+  const clamped   = Math.max(0.4, scale)
+  const cssW = Math.floor(CANVAS_W * clamped)
+  const cssH = Math.floor(CANVAS_H * clamped)
+  _canvas.style.width  = `${cssW}px`
+  _canvas.style.height = `${cssH}px`
+  // Keep controls the same width as the scaled canvas
+  if (app) app.style.width = `${cssW}px`
+  // Prevent vertical layout from collapsing below canvas + controls
+  document.body.style.minHeight = `${cssH + controlsH + 20}px`
 }
 
 export function getCtx(): CanvasRenderingContext2D {
