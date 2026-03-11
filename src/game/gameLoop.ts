@@ -5,7 +5,7 @@ import { processMovement } from '../systems/movementSystem'
 import { processEnemyTurns, generateEntities } from '../systems/entitySystem'
 import { renderDungeon } from '../engine/renderer'
 import { renderMinimap } from '../ui/minimap'
-import { renderLevelEntry, renderGameOver, renderCombatLog, renderHpOverlay } from '../ui/overlays'
+import { renderLevelEntry, renderGameOver, renderCombatLog, renderHpOverlay, renderDeadEnd } from '../ui/overlays'
 import { renderTown, townMenuItemCount, getTownMenuAction } from '../ui/town'
 
 export function startLoop(state: GameState): void {
@@ -31,19 +31,28 @@ function update(state: GameState): void {
       }
       break
 
-    case 'game_over':
-      if (consumeAction('CONFIRM')) {
-        flushInput()
-        // Reset state in-place so the loop keeps running
-        const fresh = makeInitialState()
-        state.mode          = fresh.mode
-        state.run           = fresh.run
-        state.worldSeed     = fresh.worldSeed
-        state.levelIndex    = fresh.levelIndex
-        state.townMenuIndex = fresh.townMenuIndex
-        spawnEntitiesForFloor(state)
+    case 'game_over': {
+      const elapsed = performance.now() - state.gameOverMs
+      if (elapsed < 2000) break  // text phase — no input yet
+
+      if (consumeAction('MOVE_FORWARD') || consumeAction('TURN_LEFT')) {
+        state.gameOverMenuIndex = Math.max(0, state.gameOverMenuIndex - 1)
+      }
+      if (consumeAction('MOVE_BACK') || consumeAction('TURN_RIGHT')) {
+        state.gameOverMenuIndex = Math.min(1, state.gameOverMenuIndex + 1)
+      }
+      if (consumeAction('CONFIRM') || consumeAction('INTERACT')) {
+        if (state.gameOverMenuIndex === 0) {
+          // New Game
+          flushInput()
+          const fresh = makeInitialState()
+          Object.assign(state, fresh)
+          spawnEntitiesForFloor(state)
+        }
+        // Load Game: not yet implemented — do nothing
       }
       break
+    }
 
     case 'town':
       updateTown(state)
@@ -91,11 +100,18 @@ function render(state: GameState): void {
       renderMinimap(state)
       renderCombatLog(state)
       renderLevelEntry(state)
+      renderDeadEnd(state)
       break
 
-    case 'game_over':
+    case 'game_over': {
+      const elapsed = performance.now() - state.gameOverMs
+      if (elapsed < 2000) {
+        // Render the dungeon as background then overlay death screen
+        renderDungeon(state)
+      }
       renderGameOver(state)
       break
+    }
 
     case 'town':
       renderTown(state)

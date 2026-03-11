@@ -8,6 +8,11 @@ const MACHINE_PATH  = Array.from({ length: 12 }, (_, i) => `${BASE}machinery_${i
 const FLOOR_PATHS   = Array.from({ length: 8  }, (_, i) => `${BASE}floor_${i + 1}.png`)
 const CEIL_PATHS    = Array.from({ length: 8  }, (_, i) => `${BASE}ceiling_${i + 1}.png`)
 
+const DOOR_CLOSED_PATHS = ['door_closed_1.png','door_closed_2.png','door_closed_3.png'].map(f => `${BASE}${f}`)
+const DOOR_OPEN_PATHS   = ['door_opened_1.png','door_opened_2.png','door_open_3.png'].map(f => `${BASE}${f}`)
+const STAIR_DOWN_PATH   = `${BASE}stair_down.png`
+const STAIR_UP_PATH     = `${BASE}stair_up.png`
+
 const WALL_PATHS_BY_THEME: Record<string, string[]> = {
   stone:    STONE_PATH,
   catacomb: CATACOMB_PATH,
@@ -23,6 +28,13 @@ export interface TexPixels {
   h: number
 }
 
+// deadend: Map<levelType, string[]>  e.g. 'stone' -> [msg1, msg2, ...]
+const deadEndTexts   = new Map<string, string[]>()
+// gameover: string[]
+const gameOverTexts: string[] = []
+// lvldesc: Map<levelId, string[]>   e.g. 'stone_1' -> [msg1, ...]
+const lvlDescTexts   = new Map<string, string[]>()
+
 function loadImage(path: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image()
@@ -32,10 +44,36 @@ function loadImage(path: string): Promise<HTMLImageElement> {
   })
 }
 
+function parseCSV(text: string): Record<string, string>[] {
+  const lines = text.trim().split('\n')
+  const headers = splitCSVLine(lines[0])
+  return lines.slice(1).map(line => {
+    const values = splitCSVLine(line)
+    const row: Record<string, string> = {}
+    headers.forEach((h, i) => { row[h.trim()] = (values[i] ?? '').trim() })
+    return row
+  })
+}
+
+function splitCSVLine(line: string): string[] {
+  const result: string[] = []
+  let cur = '', inQuote = false
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (ch === '"') { inQuote = !inQuote }
+    else if (ch === ',' && !inQuote) { result.push(cur); cur = '' }
+    else { cur += ch }
+  }
+  result.push(cur)
+  return result
+}
+
 export async function preloadAssets(): Promise<void> {
   const all = [
     ...STONE_PATH, ...CATACOMB_PATH, ...MACHINE_PATH,
     ...FLOOR_PATHS, ...CEIL_PATHS,
+    ...DOOR_CLOSED_PATHS, ...DOOR_OPEN_PATHS,
+    STAIR_DOWN_PATH, STAIR_UP_PATH,
   ]
   const imgs = await Promise.all(all.map(loadImage))
 
@@ -51,6 +89,34 @@ export async function preloadAssets(): Promise<void> {
       w: off.width,
       h: off.height,
     })
+  }
+
+  const [deadEndCsv, gameOverCsv, lvlDescCsv] = await Promise.all([
+    fetch(`${BASE}deadend.csv`).then(r => r.text()),
+    fetch(`${BASE}gameover.csv`).then(r => r.text()),
+    fetch(`${BASE}lvldesc.csv`).then(r => r.text()),
+  ])
+
+  for (const row of parseCSV(deadEndCsv)) {
+    const type = row['Level Type']?.toLowerCase()
+    const msg  = row['Message']
+    if (type && msg) {
+      if (!deadEndTexts.has(type)) deadEndTexts.set(type, [])
+      deadEndTexts.get(type)!.push(msg)
+    }
+  }
+
+  for (const row of parseCSV(gameOverCsv)) {
+    if (row['Message']) gameOverTexts.push(row['Message'])
+  }
+
+  for (const row of parseCSV(lvlDescCsv)) {
+    const lvl = row['Level']
+    const msg = row['Message']
+    if (lvl && msg) {
+      if (!lvlDescTexts.has(lvl)) lvlDescTexts.set(lvl, [])
+      lvlDescTexts.get(lvl)!.push(msg)
+    }
   }
 }
 
@@ -83,4 +149,35 @@ export function getWallPixels(cx: number, cy: number, theme: string): TexPixels 
   const path  = paths[cellTexIndex(cx, cy, paths.length)]
   const img   = cache.get(path)
   return img ? pixelCache.get(img.src) : undefined
+}
+
+// Use cell coords to pick door variant deterministically
+export function getDoorClosedPixels(cx: number, cy: number): TexPixels | undefined {
+  const path = DOOR_CLOSED_PATHS[cellTexIndex(cx, cy, DOOR_CLOSED_PATHS.length)]
+  return pixelCache.get(cache.get(path)?.src ?? '')
+}
+export function getDoorOpenPixels(cx: number, cy: number): TexPixels | undefined {
+  const path = DOOR_OPEN_PATHS[cellTexIndex(cx, cy, DOOR_OPEN_PATHS.length)]
+  return pixelCache.get(cache.get(path)?.src ?? '')
+}
+export function getStairDownPixels(): TexPixels | undefined {
+  return pixelCache.get(cache.get(STAIR_DOWN_PATH)?.src ?? '')
+}
+export function getStairUpPixels(): TexPixels | undefined {
+  return pixelCache.get(cache.get(STAIR_UP_PATH)?.src ?? '')
+}
+
+export function getDeadEndText(theme: string): string {
+  const pool = deadEndTexts.get(theme) ?? []
+  if (!pool.length) return ''
+  return pool[Math.floor(Math.random() * pool.length)]
+}
+export function getGameOverText(): string {
+  if (!gameOverTexts.length) return 'The darkness takes you.'
+  return gameOverTexts[Math.floor(Math.random() * gameOverTexts.length)]
+}
+export function getLevelDescText(levelId: string): string {
+  const pool = lvlDescTexts.get(levelId) ?? []
+  if (!pool.length) return ''
+  return pool[Math.floor(Math.random() * pool.length)]
 }

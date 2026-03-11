@@ -13,7 +13,7 @@ import { getCtx } from './canvas'
 import { GameState } from '../game/gameState'
 import { getCell } from '../systems/mapSystem'
 import { Direction } from '../content/types'
-import { getWallPixels, getFloorPixels, getCeilPixels } from './assets'
+import { getWallPixels, getFloorPixels, getCeilPixels, getDoorClosedPixels, getDoorOpenPixels, getStairDownPixels, getStairUpPixels } from './assets'
 import { getFloor } from '../content/floors'
 import { getEnemyDef, getItemDef } from '../content/defs'
 import { CANVAS_W, DUNGEON_H, HORIZON_Y } from '../constants'
@@ -200,14 +200,21 @@ function renderToBuffer(
 
     const darkFactor = Math.min(1, dist / SHADE_END + (side === 1 ? 0.10 : 0))
 
-    // Wall override tints
-    const cellOver    = getCell(floorId, mapX, mapY).wallOverride
-    const isDoor      = cellOver === 'door_closed' || cellOver === 'door_locked'
+    // Wall override — pick texture based on cell override
+    const cellOver     = getCell(floorId, mapX, mapY).wallOverride
+    const isDoorClosed = cellOver === 'door_closed' || cellOver === 'door_locked'
+    const isDoorOpen   = cellOver === 'door_open'
     const isStairsDown = cellOver === 'stairs_down'
     const isStairsUp   = cellOver === 'stairs_up'
     const isTownGate   = cellOver === 'town_gate'
 
-    const tex    = getWallPixels(mapX, mapY, theme)
+    let tex: ReturnType<typeof getWallPixels>
+    if (isDoorClosed)      tex = getDoorClosedPixels(mapX, mapY)
+    else if (isDoorOpen)   tex = getDoorOpenPixels(mapX, mapY)
+    else if (isStairsDown) tex = getStairDownPixels()
+    else if (isStairsUp)   tex = getStairUpPixels()
+    else                   tex = getWallPixels(mapX, mapY, theme)
+
     const tw     = tex ? tex.w : 1
     const th     = tex ? tex.h : 1
     const texCol = tex ? Math.max(0, Math.min(tw - 1, Math.floor(wallX * tw))) : 0
@@ -224,32 +231,10 @@ function renderToBuffer(
         px32 = rgba(v, Math.floor(v * 0.85), Math.floor(v * 0.62))
       }
 
-      if (isDoor) {
-        // Amber tint: boost R, reduce G, suppress B
-        const r8 = Math.min(255, Math.floor(( px32        & 0xFF) * 1.1))
-        const g8 =                Math.floor(((px32 >>  8) & 0xFF) * 0.65)
-        const b8 =                Math.floor(((px32 >> 16) & 0xFF) * 0.35)
-        px32 = 0xFF000000 | r8 | (g8 << 8) | (b8 << 16)
-      }
-      if (isStairsDown) {
-        // Green-blue tint: descending stairs
-        const r8 = Math.floor((px32        & 0xFF) * 0.5)
-        const g8 = Math.min(255, Math.floor(((px32 >>  8) & 0xFF) * 1.3))
-        const b8 = Math.min(255, Math.floor(((px32 >> 16) & 0xFF) * 1.6))
-        px32 = 0xFF000000 | r8 | (g8 << 8) | (b8 << 16)
-      }
-      if (isStairsUp) {
-        // Warm blue tint: ascending stairs
-        const r8 = Math.floor((px32        & 0xFF) * 0.7)
-        const g8 = Math.floor(((px32 >>  8) & 0xFF) * 0.9)
-        const b8 = Math.min(255, Math.floor(((px32 >> 16) & 0xFF) * 1.8))
-        px32 = 0xFF000000 | r8 | (g8 << 8) | (b8 << 16)
-      }
       if (isTownGate) {
-        // Gold/amber tint: town gate (warm, brighter than doors)
-        const r8 = Math.min(255, Math.floor((px32        & 0xFF) * 1.6))
+        const r8 = Math.min(255, Math.floor(( px32        & 0xFF) * 1.6))
         const g8 = Math.min(255, Math.floor(((px32 >>  8) & 0xFF) * 1.2))
-        const b8 = Math.floor(((px32 >> 16) & 0xFF) * 0.3)
+        const b8 =               Math.floor(((px32 >> 16) & 0xFF) * 0.3)
         px32 = 0xFF000000 | r8 | (g8 << 8) | (b8 << 16)
       }
 

@@ -3,6 +3,7 @@ import { consumeAction } from '../engine/input'
 import { stepOffset, turnLeft, turnRight, isPassable, revealAround } from './mapSystem'
 import { getFloor } from '../content/floors'
 import { playerAttack, tryPickupItem, useItem } from './entitySystem'
+import { getDeadEndText } from '../engine/assets'
 
 const MOVE_MS = 160
 const TURN_MS = 180
@@ -35,6 +36,7 @@ export function processMovement(state: GameState): void {
       run.playerActed = true
       revealAround(state)
       tryPickupItem(run, nx, ny)
+      checkDeadEnd(state)
       run.anim = { type: 'forward', prevFacing: prev, startMs: performance.now(), durationMs: MOVE_MS }
     }
 
@@ -48,6 +50,7 @@ export function processMovement(state: GameState): void {
       run.playerActed = true
       revealAround(state)
       tryPickupItem(run, nx, ny)
+      checkDeadEnd(state)
       run.anim = { type: 'back', prevFacing: prev, startMs: performance.now(), durationMs: MOVE_MS }
     }
 
@@ -93,6 +96,36 @@ function attackFacing(state: GameState): boolean {
   }
 
   return false
+}
+
+// ── Dead-end detection ────────────────────────────────────────────────────────
+
+function checkDeadEnd(state: GameState): void {
+  const run   = state.run
+  const floor = getFloor(run.floorId)
+  if (!floor) return
+  const { x, y } = run.position
+
+  // Count passable floor neighbors
+  const neighbors = [
+    floor.cells[y - 1]?.[x],
+    floor.cells[y + 1]?.[x],
+    floor.cells[y]?.[x - 1],
+    floor.cells[y]?.[x + 1],
+  ]
+  const floorCount = neighbors.filter(c => c?.type === 'floor').length
+
+  if (floorCount <= 1) {
+    // Determine theme from floorId
+    const theme = run.floorId.startsWith('catacomb') ? 'catacomb'
+                : run.floorId.startsWith('machine')  ? 'machine'
+                : 'stone'
+    const msg = getDeadEndText(theme)
+    if (msg) {
+      run.deadEndMsg = msg
+      run.deadEndMs  = performance.now()
+    }
+  }
 }
 
 // ── Interact with the cell directly in front ──────────────────────────────────

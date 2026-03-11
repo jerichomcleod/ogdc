@@ -1,6 +1,7 @@
 import { Direction } from '../content/types'
 import { LEVEL_SEQUENCE, LevelId, getFloor, regenerateDungeons } from '../content/floors'
 import { EnemyInstance, ItemInstance } from '../content/defs'
+import { getGameOverText } from '../engine/assets'
 
 export type { EnemyInstance, ItemInstance }
 
@@ -26,16 +27,21 @@ export interface RunState {
   combatLog:    string[]          // last 4 events, newest last
   levelEntryMs: number            // performance.now() when floor was entered
   playerActed:  boolean           // set true when player takes a turn action
+  deadEndMsg:   string            // current dead-end flavor text (empty = none)
+  deadEndMs:    number | null     // when dead-end message was triggered
 }
 
 export type GameMode = 'dungeon' | 'game_over' | 'town'
 
 export interface GameState {
-  mode:          GameMode
-  run:           RunState
-  worldSeed:     number
-  levelIndex:    number
-  townMenuIndex: number
+  mode:               GameMode
+  run:                RunState
+  worldSeed:          number
+  levelIndex:         number
+  townMenuIndex:      number
+  gameOverMs:         number   // performance.now() when game_over was set
+  gameOverMessage:    string   // death flavor text, picked once
+  gameOverMenuIndex:  number   // 0=New Game, 1=Load Game
 }
 
 export function pushCombatLog(run: RunState, msg: string): void {
@@ -64,6 +70,8 @@ function makeRunState(floorId: LevelId, hp: number, maxHp: number): RunState {
     combatLog:    [],
     levelEntryMs: performance.now(),
     playerActed:  false,
+    deadEndMsg:   '',
+    deadEndMs:    null,
   }
 }
 
@@ -72,11 +80,14 @@ export function makeInitialState(): GameState {
   regenerateDungeons(worldSeed)
   const levelIndex = 0
   return {
-    mode:          'dungeon',
+    mode:               'dungeon',
     worldSeed,
     levelIndex,
-    townMenuIndex: 0,
-    run:           makeRunState(LEVEL_SEQUENCE[levelIndex], 60, 60),
+    townMenuIndex:      0,
+    run:                makeRunState(LEVEL_SEQUENCE[levelIndex], 60, 60),
+    gameOverMs:         0,
+    gameOverMessage:    '',
+    gameOverMenuIndex:  0,
   }
 }
 
@@ -124,6 +135,8 @@ export function goUp(state: GameState): void {
     combatLog:    [],
     levelEntryMs: performance.now(),
     playerActed:  false,
+    deadEndMsg:   '',
+    deadEndMs:    null,
   }
 }
 
@@ -147,5 +160,14 @@ export function returnToDungeon(state: GameState): void {
     combatLog:    [],
     levelEntryMs: performance.now(),
     playerActed:  false,
+    deadEndMsg:   '',
+    deadEndMs:    null,
   }
+}
+
+export function triggerGameOver(state: GameState): void {
+  state.mode             = 'game_over'
+  state.gameOverMs       = performance.now()
+  state.gameOverMessage  = getGameOverText()
+  state.gameOverMenuIndex = 0
 }

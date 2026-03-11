@@ -2,7 +2,7 @@
  * Entity system: enemy/item placement and enemy AI turns.
  */
 
-import { GameState, RunState, pushCombatLog } from '../game/gameState'
+import { GameState, RunState, pushCombatLog, triggerGameOver } from '../game/gameState'
 import { EnemyInstance, ItemInstance, ENEMY_DEFS, ITEM_DEFS, getEnemyDef, getItemDef } from '../content/defs'
 import { getFloor } from '../content/floors'
 import { makeRng } from '../content/dungeonGen'
@@ -140,7 +140,7 @@ function dealDamageToPlayer(state: GameState, defKey: string, attack: number): v
   pushCombatLog(state.run, `The ${name} hits you for ${attack} damage.`)
   if (state.run.hp <= 0) {
     state.run.hp = 0
-    state.mode   = 'game_over'
+    triggerGameOver(state)
   }
 }
 
