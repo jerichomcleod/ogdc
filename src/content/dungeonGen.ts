@@ -372,19 +372,26 @@ function rasterize(graph: DunGraph, positions: Map<number, RoomPos>, r: () => nu
     cx: number, cy: number, hs: number,
     cells: Cell[][], cellW: number, cellH: number
   ): StairResult | null {
-    const candidates: StairResult[] = [
-      { wallX: cx,      wallY: cy-hs-1, floorX: cx,      floorY: cy-hs, facing: 'north' },
-      { wallX: cx+hs+1, wallY: cy,      floorX: cx+hs,   floorY: cy,    facing: 'east'  },
-      { wallX: cx,      wallY: cy+hs+1, floorX: cx,      floorY: cy+hs, facing: 'south' },
-      { wallX: cx-hs-1, wallY: cy,      floorX: cx-hs,   floorY: cy,    facing: 'west'  },
+    // Search every floor cell in the room for any adjacent wall cell.
+    // This handles highly-connected rooms where all 4 centre-adjacent walls
+    // have been carved into corridors by the larger graph.
+    const CARD: [number, number, Direction][] = [
+      [ 0, -1, 'north'], [ 1,  0, 'east'],
+      [ 0,  1, 'south'], [-1,  0, 'west'],
     ]
-    for (const c of candidates) {
-      if (
-        c.wallX >= 0 && c.wallX < cellW && c.wallY >= 0 && c.wallY < cellH &&
-        cells[c.wallY][c.wallX].type === 'wall' &&
-        c.floorX >= 0 && c.floorX < cellW && c.floorY >= 0 && c.floorY < cellH &&
-        cells[c.floorY][c.floorX].type === 'floor'
-      ) return c
+    for (let dy = -hs; dy <= hs; dy++) {
+      for (let dx = -hs; dx <= hs; dx++) {
+        const fx = cx + dx, fy = cy + dy
+        if (fx < 0 || fx >= cellW || fy < 0 || fy >= cellH) continue
+        if (cells[fy][fx].type !== 'floor') continue
+        for (const [wdx, wdy, facing] of CARD) {
+          const wx = fx + wdx, wy = fy + wdy
+          if (wx < 0 || wx >= cellW || wy < 0 || wy >= cellH) continue
+          if (cells[wy][wx].type === 'wall') {
+            return { wallX: wx, wallY: wy, floorX: fx, floorY: fy, facing }
+          }
+        }
+      }
     }
     return null
   }
