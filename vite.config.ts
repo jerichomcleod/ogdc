@@ -1,6 +1,9 @@
 import { defineConfig } from 'vite'
 
 export default defineConfig({
+  test: {
+    environment: 'node',
+  },
   base: '/ogdc/',
   // Serve assets/ at URL root: /stone_1.png, /floor_1.png, etc.
   publicDir: 'assets',

@@ -62,17 +62,67 @@ None of these exist yet:
 
 ### Special Cell Markers
 
-These wall override types are defined in code but have no visual distinction yet. They currently render as plain walls:
+These wall override types are defined in code. Door and stair textures now exist; the rest still render as plain walls:
 
-| Type | Suggested Visual |
-|------|-----------------|
-| `door_closed` | Wall texture with a door arch/frame overlay |
-| `door_open` | Recessed doorway — floor visible through gap |
-| `door_locked` | Door with keyhole detail |
-| `passage` | Archway or curtained opening |
-| `rune` | Wall with a glowing carved symbol |
+| Type | Texture file(s) | Status |
+|------|----------------|--------|
+| `door_closed` | `door_closed_1/2/3.png` | ✅ Done |
+| `door_open` | `door_opened_1/2.png`, `door_open_3.png` | ✅ Done |
+| `stairs_down` | `stair_down.png` | ✅ Done |
+| `stairs_up` | `stair_up.png` | ✅ Done |
+| `town_gate` | Uses wall texture + gold tint | Functional — dedicated texture optional |
+| `door_locked` | — | Not yet |
+| `passage` | — | Not yet |
+| `rune` | — | Not yet |
 
-If you want these to stand out visually, either provide separate textures for each, or provide overlay sprites that get composited onto the wall face.
+---
+
+### Enemy Sprites (9 needed)
+
+Currently rendered as solid-color billboards. Each needs a PNG with transparent background — the renderer composites them as 3D billboards. Enemies render at **75% of wall face height**; sprites should fill the frame vertically.
+
+Recommended size: **128×128 px** (or 64×64 minimum), transparent PNG.
+
+| Filename | Enemy | Theme | Color hint |
+|----------|-------|-------|-----------|
+| `enemy_crawler.png` | Cave Crawler | Stone | Dim green — small, insectoid |
+| `enemy_shade.png` | Shadow | Stone | Dark purple — wispy silhouette |
+| `enemy_sentinel.png` | Stone Sentinel | Stone | Slate blue-grey — large humanoid |
+| `enemy_revenant.png` | Revenant | Catacomb | Amber glow — undead humanoid |
+| `enemy_boneguard.png` | Bone Guard | Catacomb | Ivory/white — skeletal soldier |
+| `enemy_wraith.png` | Wraith | Catacomb/Machine | Teal — translucent, flowing |
+| `enemy_automaton.png` | Automaton | Machine | Bronze/orange — mechanical humanoid |
+| `enemy_drone.png` | Sentry Drone | Machine | Red-orange — floating |
+| `enemy_heavy.png` | Heavy Unit | Machine | Dark red — large, armored |
+
+---
+
+### Item Sprites (2 needed)
+
+Items render at **28% of wall face height**, shifted toward the floor (ground-level objects). Keep them small and readable at low resolution.
+
+| Filename | Item | Notes |
+|----------|------|-------|
+| `item_potion_sm.png` | Healing Draught | Small vial, red liquid |
+| `item_potion_lg.png` | Healing Potion | Larger flask, brighter red |
+
+---
+
+### Town Background (1 needed)
+
+The town screen currently draws a procedural gradient. A painted background would replace it.
+
+| Filename | Size | Description |
+|----------|------|-------------|
+| `town_bg.png` | 640×320 px | Surface scene — night sky, stone buildings, dungeon entrance visible. Dark/moody to match dungeon aesthetic |
+
+---
+
+### Town Gate Wall Texture (optional)
+
+| Filename | Use | Notes |
+|----------|-----|-------|
+| `town_gate.png` | Wall face for the gate back to town (level 1 entry wall) | Arched gate/portal, warm gold tones. Currently uses stone wall + gold tint. |
 
 ---
 
@@ -124,19 +174,7 @@ Nothing exists yet. Suggested priority order:
 Nothing exists yet. The following are needed to give the game voice:
 
 ### Level Flavor Text
-Short atmospheric descriptions shown when entering each level (1–3 sentences). One per level:
-
-| Level ID     | Tone suggestion |
-|--------------|----------------|
-| `stone_1`    | Threshold — the player has just descended. Unease, damp air. |
-| `stone_2–4`  | Deepening dread. Hints of what came before. |
-| `stone_5`    | Something shifts. The stone is older here. |
-| `catacomb_1` | The dead are everywhere. Not all of them restful. |
-| `catacomb_2–4` | Growing wrongness. Names on the walls. Familiar ones. |
-| `catacomb_5` | The oldest part. Something was sealed here. |
-| `machine_1`  | Metal and oil. Not natural. Who built this? |
-| `machine_2–4` | The machines are still running. Why? |
-| `machine_5`  | The source. This is what the dungeon was built around. |
+✅ **Done** — loaded from `lvldesc.csv` (5 variants per level, randomly selected on entry).
 
 ### POI Room Descriptions
 Short text (1–2 sentences) shown when the player enters a Point of Interest room. Needed per theme:
@@ -146,7 +184,7 @@ Short text (1–2 sentences) shown when the player enters a Point of Interest ro
 - **Machinery**: 4–6 variants (control station, coolant junction, reactor core section, storage bay, maintenance shaft, collapsed generator)
 
 ### Dead End Flavour
-1–2 sentence descriptions for dead-end rooms (no progression value — pure atmosphere). 3–5 per theme.
+✅ **Done** — loaded from `deadend.csv` (5 variants per theme: stone, catacomb, machine).
 
 ### Item / Loot Descriptions
 Not yet implemented, but when items are added these will be needed:
@@ -161,7 +199,7 @@ Not yet implemented. Suggested sets per theme (3–5 per theme):
 - **Machinery**: Automatons, corrupted maintenance units, things grown into the pipes
 
 ### Game Over Text
-3–5 short variants (avoid generic "You died"). Match the tone of the dungeon.
+✅ **Done** — loaded from `gameover.csv` (11 variants, randomly selected at death).
 
 ### Level Completion / Exit Text
 Short text when stepping on the exit cell. Can be atmospheric rather than mechanical. 1 per level or 1 per theme.

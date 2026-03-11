@@ -59,9 +59,8 @@ export function processMovement(state: GameState): void {
 
   // ── Attack ─────────────────────────────────────────────────────────────────
   } else if (consumeAction('ATTACK')) {
-    if (attackFacing(state)) {
-      run.playerActed = true
-    }
+    attackFacing(state)
+    run.playerActed = true
 
   // ── Use item ───────────────────────────────────────────────────────────────
   } else if (consumeAction('USE_ITEM')) {

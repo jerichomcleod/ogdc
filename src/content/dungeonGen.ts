@@ -89,6 +89,9 @@ function buildGraph(r: () => number): DunGraph {
   for (let i = 0; i < mainPath.length - 1; i++) link(mainPath[i], mainPath[i + 1])
 
   // ── 2. Wide areas: parallel corridor bands alongside a main-path segment ─
+  const startId = mainPath[0]
+  const endId   = mainPath[mainPath.length - 1]
+
   const wideCount = ri(r, 2, 4)
   for (let w = 0; w < wideCount; w++) {
     const lo = 2, hi = mainPath.length - 4
@@ -104,9 +107,14 @@ function buildGraph(r: () => number): DunGraph {
       for (let col = 0; col < segLen - 1; col++) link(rowNodes[col], rowNodes[col + 1])
       // Cross-connections to previous row
       for (let col = 0; col < segLen; col++) link(prevRow[col], rowNodes[col])
-      // Attach ends of new row to main path entry/exit
-      if (segStart > 0)                        link(mainPath[segStart - 1],       rowNodes[0])
-      if (segStart + segLen < mainPath.length) link(mainPath[segStart + segLen], rowNodes[segLen - 1])
+      // Attach ends of new row to main path entry/exit —
+      // but never connect to start/end nodes (would steal their only free wall faces)
+      const beforeStart = mainPath[segStart - 1]
+      const afterEnd    = mainPath[segStart + segLen]
+      if (segStart > 0 && beforeStart !== startId && beforeStart !== endId)
+        link(beforeStart, rowNodes[0])
+      if (segStart + segLen < mainPath.length && afterEnd !== startId && afterEnd !== endId)
+        link(afterEnd, rowNodes[segLen - 1])
       prevRow = rowNodes
     }
   }
@@ -127,19 +135,22 @@ function buildGraph(r: () => number): DunGraph {
   }
 
   // ── 4. Extra loops (1–3): connect non-adjacent existing nodes ─────────────
-  const allNodes = [...nodes.values()]
+  // Exclude start and end so they keep exactly 1 corridor, guaranteeing free
+  // wall faces for stair placement in their rooms.
+  const loopCandidates = [...nodes.values()].filter(n => n.role !== 'start' && n.role !== 'end')
   const loopCount = ri(r, 2, 6)
   for (let l = 0; l < loopCount; l++) {
     for (let attempt = 0; attempt < 30; attempt++) {
-      const a = allNodes[Math.floor(r() * allNodes.length)]
-      const b = allNodes[Math.floor(r() * allNodes.length)]
+      const a = loopCandidates[Math.floor(r() * loopCandidates.length)]
+      const b = loopCandidates[Math.floor(r() * loopCandidates.length)]
       if (a.id !== b.id && !a.neighbors.has(b.id) && link(a.id, b.id)) break
     }
   }
 
   // ── 5. Dead ends (2–4): short stubs from any node ────────────────────────
   const deadCount = ri(r, 4, 8)
-  const nodeSnap  = [...nodes.values()]
+  // Also exclude start/end from dead-end anchors to preserve their wall faces
+  const nodeSnap  = [...nodes.values()].filter(n => n.role !== 'start' && n.role !== 'end')
   for (let d = 0; d < deadCount; d++) {
     const anchor = nodeSnap[Math.floor(r() * nodeSnap.length)]
     if (anchor.neighbors.size >= 4) continue
@@ -372,9 +383,6 @@ function rasterize(graph: DunGraph, positions: Map<number, RoomPos>, r: () => nu
     cx: number, cy: number, hs: number,
     cells: Cell[][], cellW: number, cellH: number
   ): StairResult | null {
-    // Search every floor cell in the room for any adjacent wall cell.
-    // This handles highly-connected rooms where all 4 centre-adjacent walls
-    // have been carved into corridors by the larger graph.
     const CARD: [number, number, Direction][] = [
       [ 0, -1, 'north'], [ 1,  0, 'east'],
       [ 0,  1, 'south'], [-1,  0, 'west'],
@@ -386,27 +394,41 @@ function rasterize(graph: DunGraph, positions: Map<number, RoomPos>, r: () => nu
       return CARD.reduce((n, [d0, d1]) =>
         n + (cells[wy + d1]?.[wx + d0]?.type === 'floor' ? 1 : 0), 0)
     }
+    function floorNeighboursOfFloor(fx: number, fy: number): number {
+      return CARD.reduce((n, [d0, d1]) =>
+        n + (cells[fy + d1]?.[fx + d0]?.type === 'floor' ? 1 : 0), 0)
+    }
 
-    for (let dy = -hs; dy <= hs; dy++) {
-      for (let dx = -hs; dx <= hs; dx++) {
-        const fx = cx + dx, fy = cy + dy
-        if (fx < 0 || fx >= cellW || fy < 0 || fy >= cellH) continue
-        if (cells[fy][fx].type !== 'floor') continue
-        for (const [wdx, wdy, facing] of CARD) {
-          const wx = fx + wdx, wy = fy + wdy
-          if (wx < 0 || wx >= cellW || wy < 0 || wy >= cellH) continue
-          if (cells[wy][wx].type === 'wall' && floorNeighbours(wx, wy) === 1) {
-            return { wallX: wx, wallY: wy, floorX: fx, floorY: fy, facing }
+    function scan(radius: number, requireRoomFloor: boolean): StairResult | null {
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          const fx = cx + dx, fy = cy + dy
+          if (fx < 0 || fx >= cellW || fy < 0 || fy >= cellH) continue
+          if (cells[fy][fx].type !== 'floor') continue
+          // When extending beyond the room, only use floor cells that are
+          // themselves room-like (≥2 floor neighbours) to avoid corridor tips.
+          if (requireRoomFloor && floorNeighboursOfFloor(fx, fy) < 2) continue
+          for (const [wdx, wdy, facing] of CARD) {
+            const wx = fx + wdx, wy = fy + wdy
+            if (wx < 0 || wx >= cellW || wy < 0 || wy >= cellH) continue
+            if (cells[wy][wx].type === 'wall' && floorNeighbours(wx, wy) === 1) {
+              return { wallX: wx, wallY: wy, floorX: fx, floorY: fy, facing }
+            }
           }
         }
       }
+      return null
     }
-    return null
+
+    // Pass 1: strict — room area only (hs=1), any floor cell
+    return scan(hs, false)
+        // Pass 2: extended — search wider but only from room-like floor cells
+        ?? scan(4, true)
   }
 
   const spCx = toCx(sp.rx), spCy = toCy(sp.ry)
   const epCx = toCx(ep.rx), epCy = toCy(ep.ry)
-  const HS = 1  // halfSize for start/end rooms
+  const HS = 1  // start/end nodes have at most 1 corridor (protected above), so their 3×3 room always has free wall faces
 
   const entrySlot = findWallSlot(spCx, spCy, HS, cells, cellW, cellH)
   const exitSlot  = findWallSlot(epCx, epCy, HS, cells, cellW, cellH)

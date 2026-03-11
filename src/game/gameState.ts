@@ -26,9 +26,10 @@ export interface RunState {
   inventory:    ItemInstance[]    // items carried by the player
   combatLog:    string[]          // last 4 events, newest last
   levelEntryMs: number            // performance.now() when floor was entered
-  playerActed:  boolean           // set true when player takes a turn action
-  deadEndMsg:   string            // current dead-end flavor text (empty = none)
-  deadEndMs:    number | null     // when dead-end message was triggered
+  playerActed:      boolean           // set true when player takes a turn action
+  deadEndMsg:       string            // current dead-end flavor text (empty = none)
+  deadEndMs:        number | null     // when dead-end message was triggered
+  entitiesSpawned:  boolean          // true after first entity spawn; prevents respawn on kill-all
 }
 
 export type GameMode = 'dungeon' | 'game_over' | 'town'
@@ -70,9 +71,10 @@ function makeRunState(floorId: LevelId, hp: number, maxHp: number): RunState {
     inventory:    [],
     combatLog:    [],
     levelEntryMs: performance.now(),
-    playerActed:  false,
-    deadEndMsg:   '',
-    deadEndMs:    null,
+    playerActed:      false,
+    deadEndMsg:       '',
+    deadEndMs:        null,
+    entitiesSpawned:  false,
   }
 }
 
@@ -136,9 +138,10 @@ export function goUp(state: GameState): void {
     inventory,
     combatLog:    [],
     levelEntryMs: performance.now(),
-    playerActed:  false,
-    deadEndMsg:   '',
-    deadEndMs:    null,
+    playerActed:      false,
+    deadEndMsg:       '',
+    deadEndMs:        null,
+    entitiesSpawned:  false,
   }
 }
 
@@ -161,9 +164,10 @@ export function returnToDungeon(state: GameState): void {
     inventory,
     combatLog:    [],
     levelEntryMs: performance.now(),
-    playerActed:  false,
-    deadEndMsg:   '',
-    deadEndMs:    null,
+    playerActed:      false,
+    deadEndMsg:       '',
+    deadEndMs:        null,
+    entitiesSpawned:  false,
   }
 }
 

@@ -84,8 +84,8 @@ function tickAnim(state: GameState): void {
   const t = (performance.now() - state.run.anim.startMs) / state.run.anim.durationMs
   if (t >= 1) {
     state.run.anim = null
-    // Spawn entities when we enter a new floor (detected by empty enemy list after advance)
-    if (state.run.enemies.length === 0 && state.run.items.length === 0) {
+    // Spawn entities when entering a new floor for the first time
+    if (!state.run.entitiesSpawned) {
       spawnEntitiesForFloor(state)
     }
   }
@@ -125,6 +125,7 @@ function spawnEntitiesForFloor(state: GameState): void {
     state.worldSeed,
     state.levelIndex,
   )
-  state.run.enemies = enemies
-  state.run.items   = items
+  state.run.enemies         = enemies
+  state.run.items           = items
+  state.run.entitiesSpawned = true
 }

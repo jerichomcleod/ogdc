@@ -86,11 +86,58 @@ export function generateEntities(floorId: string, worldSeed: number, levelIndex:
 
 const AGGRO_RANGE = 12
 
+/** BFS from (sx,sy) toward (tx,ty) within maxDist steps. Returns the first step to take, or null. */
+function bfsStep(
+  fid:      string,
+  sx: number, sy: number,
+  tx: number, ty: number,
+  maxDist:  number,
+  occupied: Set<string>,
+): [number, number] | null {
+  if (sx === tx && sy === ty) return null
+  const DIRS: [number, number][] = [[0, -1], [0, 1], [-1, 0], [1, 0]]
+  // parent map: key → [parentX, parentY] or null for start
+  const parent = new Map<string, [number, number] | null>()
+  const queue: [number, number][] = [[sx, sy]]
+  parent.set(`${sx},${sy}`, null)
+
+  while (queue.length) {
+    const [cx, cy] = queue.shift()!
+    for (const [dx, dy] of DIRS) {
+      const nx = cx + dx, ny = cy + dy
+      const key = `${nx},${ny}`
+      if (parent.has(key)) continue
+      // Allow entering the player's cell (to "reach" it), but not other enemies
+      const isTarget = nx === tx && ny === ty
+      if (!isTarget && (!isPassable(fid, nx, ny) || occupied.has(key))) continue
+      parent.set(key, [cx, cy])
+      if (isTarget) {
+        // Trace back to find first step from (sx,sy)
+        let cur: [number, number] = [nx, ny]
+        let prev = parent.get(key)!
+        while (prev && !(prev[0] === sx && prev[1] === sy)) {
+          cur  = prev
+          prev = parent.get(`${prev[0]},${prev[1]}`)!
+        }
+        return cur
+      }
+      // Prune by Manhattan distance budget
+      if (Math.abs(nx - sx) + Math.abs(ny - sy) < maxDist) {
+        queue.push([nx, ny])
+      }
+    }
+  }
+  return null
+}
+
 export function processEnemyTurns(state: GameState): void {
   const run  = state.run
   const px   = run.position.x
   const py   = run.position.y
   const fid  = run.floorId
+
+  // Build occupied set from current enemy positions for collision avoidance
+  const occupied = new Set<string>(run.enemies.map(e => `${e.x},${e.y}`))
 
   for (const enemy of run.enemies) {
     const def = getEnemyDef(enemy.defKey)
@@ -111,24 +158,17 @@ export function processEnemyTurns(state: GameState): void {
     // Move toward player if in aggro range
     if (dist > AGGRO_RANGE) continue
 
-    const dx = Math.sign(px - enemy.x)
-    const dy = Math.sign(py - enemy.y)
+    // Remove self from occupied before pathfinding so we can move into our own cell
+    occupied.delete(`${enemy.x},${enemy.y}`)
 
-    // Try primary axis first, then secondary; randomise tie-break
-    const steps: [number, number][] = []
-    if (dx !== 0) steps.push([dx, 0])
-    if (dy !== 0) steps.push([0, dy])
-    if (steps.length === 2 && Math.random() < 0.5) steps.reverse()
-
-    for (const [sx, sy] of steps) {
-      const nx = enemy.x + sx
-      const ny = enemy.y + sy
-      if (!isPassable(fid, nx, ny)) continue
-      if (nx === px && ny === py)   continue   // don't walk into player
-      if (run.enemies.some(e => e !== enemy && e.x === nx && e.y === ny)) continue
+    const step = bfsStep(fid, enemy.x, enemy.y, px, py, AGGRO_RANGE, occupied)
+    if (step) {
+      const [nx, ny] = step
+      occupied.add(`${nx},${ny}`)
       enemy.x = nx
       enemy.y = ny
-      break
+    } else {
+      occupied.add(`${enemy.x},${enemy.y}`)
     }
   }
 }
