@@ -42,6 +42,7 @@ export interface GameState {
   gameOverMs:         number   // performance.now() when game_over was set
   gameOverMessage:    string   // death flavor text, picked once
   gameOverMenuIndex:  number   // 0=New Game, 1=Load Game
+  shownLevelEntries:  Set<string>  // floors whose entry message has been shown this run
 }
 
 export function pushCombatLog(run: RunState, msg: string): void {
@@ -88,6 +89,7 @@ export function makeInitialState(): GameState {
     gameOverMs:         0,
     gameOverMessage:    '',
     gameOverMenuIndex:  0,
+    shownLevelEntries:  new Set(),
   }
 }
 

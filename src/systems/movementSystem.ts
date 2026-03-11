@@ -1,4 +1,4 @@
-import { GameState, advanceLevel, goUp, goToTown } from '../game/gameState'
+import { GameState, advanceLevel, goUp } from '../game/gameState'
 import { consumeAction } from '../engine/input'
 import { stepOffset, turnLeft, turnRight, isPassable, revealAround } from './mapSystem'
 import { getFloor } from '../content/floors'
@@ -30,7 +30,9 @@ export function processMovement(state: GameState): void {
   } else if (consumeAction('MOVE_FORWARD')) {
     const { dx, dy } = stepOffset(run.facing)
     const nx = run.position.x + dx, ny = run.position.y + dy
-    if (isPassable(run.floorId, nx, ny) && !run.enemies.some(e => e.x === nx && e.y === ny)) {
+    if (!isPassable(run.floorId, nx, ny) && tryStairTransit(state, nx, ny)) {
+      run.playerActed = true
+    } else if (isPassable(run.floorId, nx, ny) && !run.enemies.some(e => e.x === nx && e.y === ny)) {
       const prev      = run.facing
       run.position.x  = nx
       run.position.y  = ny
@@ -147,17 +149,16 @@ function interactFacing(state: GameState): boolean {
     floor.cells[ty][tx] = { type: 'wall', wallOverride: 'door_open' }
     return true
   }
-  if (cell.wallOverride === 'stairs_down') {
-    advanceLevel(state)
-    return true
-  }
-  if (cell.wallOverride === 'stairs_up') {
-    goUp(state)
-    return true
-  }
-  if (cell.wallOverride === 'town_gate') {
-    goToTown(state)
-    return true
-  }
+  return false
+}
+
+// ── Stair transit on forward movement ─────────────────────────────────────────
+
+function tryStairTransit(state: GameState, tx: number, ty: number): boolean {
+  const floor = getFloor(state.run.floorId)
+  if (!floor || ty < 0 || ty >= floor.height || tx < 0 || tx >= floor.width) return false
+  const cell = floor.cells[ty][tx]
+  if (cell.wallOverride === 'stairs_down') { advanceLevel(state); return true }
+  if (cell.wallOverride === 'stairs_up' || cell.wallOverride === 'town_gate') { goUp(state); return true }
   return false
 }

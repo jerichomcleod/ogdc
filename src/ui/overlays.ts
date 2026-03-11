@@ -27,6 +27,9 @@ let _cachedDescFloor = ''
 let _cachedDesc      = ''
 
 export function renderLevelEntry(state: GameState): void {
+  // Only show once per floor per run
+  if (state.shownLevelEntries.has(state.run.floorId)) return
+
   // Cache the subtitle per floor to avoid re-randomising each frame
   if (state.run.floorId !== _cachedDescFloor) {
     _cachedDescFloor = state.run.floorId
@@ -34,7 +37,10 @@ export function renderLevelEntry(state: GameState): void {
   }
 
   const elapsed = performance.now() - state.run.levelEntryMs
-  if (elapsed >= ENTRY_DURATION_MS) return
+  if (elapsed >= ENTRY_DURATION_MS) {
+    state.shownLevelEntries.add(state.run.floorId)
+    return
+  }
 
   const title = levelLabel(state.run.floorId)
   if (!title) return

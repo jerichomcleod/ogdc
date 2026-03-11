@@ -58,7 +58,7 @@ export function generateEntities(floorId: string, worldSeed: number, levelIndex:
   if (!eligible.length) return { enemies: [], items: [] }
 
   // Enemies
-  const enemyCount = ri(r, 3 + depth, 5 + depth * 2)
+  const enemyCount = ri(r, Math.round((3 + depth) * 0.65), Math.round((5 + depth * 2) * 0.65))
   for (let i = 0; i < enemyCount && pi < pool.length; i++) {
     const [x, y] = pool[pi++]
     const k = `${x},${y}`

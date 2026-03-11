@@ -80,7 +80,7 @@ function buildGraph(r: () => number): DunGraph {
   }
 
   // ── 1. Main path ─────────────────────────────────────────────────────────
-  const pathLen = ri(r, 7, 14)
+  const pathLen = ri(r, 14, 28)
   const mainPath: number[] = []
   for (let i = 0; i < pathLen; i++) {
     const role: NodeRole = i === 0 ? 'start' : i === pathLen - 1 ? 'end' : 'normal'
@@ -89,7 +89,7 @@ function buildGraph(r: () => number): DunGraph {
   for (let i = 0; i < mainPath.length - 1; i++) link(mainPath[i], mainPath[i + 1])
 
   // ── 2. Wide areas: parallel corridor bands alongside a main-path segment ─
-  const wideCount = ri(r, 1, 2)
+  const wideCount = ri(r, 2, 4)
   for (let w = 0; w < wideCount; w++) {
     const lo = 2, hi = mainPath.length - 4
     if (hi < lo) continue
@@ -112,7 +112,7 @@ function buildGraph(r: () => number): DunGraph {
   }
 
   // ── 3. POI branches (2–4): side branches from mid-path, 2+ from each end ─
-  const poiCount = ri(r, 2, 4)
+  const poiCount = ri(r, 4, 8)
   for (let p = 0; p < poiCount; p++) {
     const candidates = mainPath.filter((_, i) => i >= 2 && i <= mainPath.length - 3)
     if (!candidates.length) continue
@@ -128,7 +128,7 @@ function buildGraph(r: () => number): DunGraph {
 
   // ── 4. Extra loops (1–3): connect non-adjacent existing nodes ─────────────
   const allNodes = [...nodes.values()]
-  const loopCount = ri(r, 1, 3)
+  const loopCount = ri(r, 2, 6)
   for (let l = 0; l < loopCount; l++) {
     for (let attempt = 0; attempt < 30; attempt++) {
       const a = allNodes[Math.floor(r() * allNodes.length)]
@@ -138,7 +138,7 @@ function buildGraph(r: () => number): DunGraph {
   }
 
   // ── 5. Dead ends (2–4): short stubs from any node ────────────────────────
-  const deadCount = ri(r, 2, 4)
+  const deadCount = ri(r, 4, 8)
   const nodeSnap  = [...nodes.values()]
   for (let d = 0; d < deadCount; d++) {
     const anchor = nodeSnap[Math.floor(r() * nodeSnap.length)]
@@ -420,7 +420,7 @@ function rasterize(graph: DunGraph, positions: Map<number, RoomPos>, r: () => nu
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
-export function generateFloor(id: string, theme: FloorTheme, seed: number, levelIndex: number): FloorMap {
+export function generateFloor(id: string, theme: FloorTheme, seed: number, _levelIndex: number): FloorMap {
   const r     = makeRng(seed)
   const graph = buildGraph(r)
   const pos   = layoutGraph(graph, r)
@@ -442,11 +442,6 @@ export function generateFloor(id: string, theme: FloorTheme, seed: number, level
     returnFacing: rast.returnFacing,
     entryWallX:   rast.entryWallX,
     entryWallY:   rast.entryWallY,
-  }
-
-  // Override entry wall for first level: stairs_up → town_gate
-  if (levelIndex === 0) {
-    floor.cells[floor.entryWallY][floor.entryWallX] = { type: 'wall', wallOverride: 'town_gate' }
   }
 
   return floor
