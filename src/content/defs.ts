@@ -59,13 +59,25 @@ export function getItemDef(key: string): ItemDef | undefined {
 // ── Entity instances (live in GameState) ─────────────────────────────────────
 
 export interface EnemyInstance {
-  id:       number
-  defKey:   string
-  x:        number
-  y:        number
-  hp:       number
-  maxHp:    number
-  turnDebt: number   // counts up; acts when turnDebt >= speed
+  id:          number
+  defKey:      string
+  x:           number
+  y:           number
+  fromX:       number    // position at start of current move animation
+  fromY:       number
+  hp:          number
+  maxHp:       number
+  turnDebt:    number    // counts up; acts when turnDebt >= speed
+  isAttacking: boolean   // true while enemy's last action was an attack; cleared on move/idle
+}
+
+/** A killed enemy that lingers as a corpse until the player moves away. */
+export interface Corpse {
+  x:              number
+  y:              number
+  defKey:         string
+  killedFromX:    number   // player cell at moment of kill
+  killedFromY:    number
 }
 
 export interface ItemInstance {

@@ -81,6 +81,7 @@ function makeRunState(overrides: Partial<RunState> = {}): RunState {
     deadEndMsg: '',
     deadEndMs: null,
     entitiesSpawned: false,
+    corpses: [],
     ...overrides,
   }
 }
@@ -96,6 +97,7 @@ function makeGameState(runOverrides: Partial<RunState> = {}): GameState {
     gameOverMessage: '',
     gameOverMenuIndex: 0,
     shownLevelEntries: new Set(),
+    gameTick: 0,
   }
 }
 
@@ -182,7 +184,7 @@ describe('playerAttack', () => {
   })
 
   it('returns true and reduces enemy HP', () => {
-    const enemy: EnemyInstance = { id: 1, defKey: 'crawler', x: 2, y: 2, hp: 10, maxHp: 10, turnDebt: 0 }
+    const enemy: EnemyInstance = { id: 1, defKey: 'crawler', x: 2, y: 2, hp: 10, maxHp: 10, turnDebt: 0, isAttacking: false }
     const run = makeRunState({ enemies: [enemy] })
     const result = playerAttack(run, 2, 2)
     expect(result).toBe(true)
@@ -190,21 +192,21 @@ describe('playerAttack', () => {
   })
 
   it('removes enemy from list on kill', () => {
-    const enemy: EnemyInstance = { id: 1, defKey: 'crawler', x: 2, y: 2, hp: 1, maxHp: 6, turnDebt: 0 }
+    const enemy: EnemyInstance = { id: 1, defKey: 'crawler', x: 2, y: 2, hp: 1, maxHp: 6, turnDebt: 0, isAttacking: false }
     const run = makeRunState({ enemies: [enemy] })
     playerAttack(run, 2, 2)
     expect(run.enemies).toHaveLength(0)
   })
 
   it('logs a message on kill', () => {
-    const enemy: EnemyInstance = { id: 1, defKey: 'crawler', x: 2, y: 2, hp: 1, maxHp: 6, turnDebt: 0 }
+    const enemy: EnemyInstance = { id: 1, defKey: 'crawler', x: 2, y: 2, hp: 1, maxHp: 6, turnDebt: 0, isAttacking: false }
     const run = makeRunState({ enemies: [enemy] })
     playerAttack(run, 2, 2)
     expect(run.combatLog.some(m => m.includes('kill') || m.includes('kill'))).toBe(true)
   })
 
   it('logs a message on hit (not kill)', () => {
-    const enemy: EnemyInstance = { id: 1, defKey: 'crawler', x: 2, y: 2, hp: 100, maxHp: 100, turnDebt: 0 }
+    const enemy: EnemyInstance = { id: 1, defKey: 'crawler', x: 2, y: 2, hp: 100, maxHp: 100, turnDebt: 0, isAttacking: false }
     const run = makeRunState({ enemies: [enemy] })
     playerAttack(run, 2, 2)
     expect(run.combatLog.length).toBeGreaterThan(0)
@@ -213,7 +215,7 @@ describe('playerAttack', () => {
   it('combat log never exceeds 4 entries', () => {
     const run = makeRunState()
     for (let i = 0; i < 10; i++) {
-      const enemy: EnemyInstance = { id: i, defKey: 'crawler', x: 2, y: 2, hp: 1, maxHp: 6, turnDebt: 0 }
+      const enemy: EnemyInstance = { id: i, defKey: 'crawler', x: 2, y: 2, hp: 1, maxHp: 6, turnDebt: 0, isAttacking: false }
       run.enemies.push(enemy)
       playerAttack(run, 2, 2)
     }
@@ -221,8 +223,8 @@ describe('playerAttack', () => {
   })
 
   it('does not affect enemies at other positions', () => {
-    const e1: EnemyInstance = { id: 1, defKey: 'crawler', x: 2, y: 2, hp: 10, maxHp: 10, turnDebt: 0 }
-    const e2: EnemyInstance = { id: 2, defKey: 'crawler', x: 3, y: 3, hp: 10, maxHp: 10, turnDebt: 0 }
+    const e1: EnemyInstance = { id: 1, defKey: 'crawler', x: 2, y: 2, hp: 10, maxHp: 10, turnDebt: 0, isAttacking: false }
+    const e2: EnemyInstance = { id: 2, defKey: 'crawler', x: 3, y: 3, hp: 10, maxHp: 10, turnDebt: 0, isAttacking: false }
     const run = makeRunState({ enemies: [e1, e2] })
     playerAttack(run, 2, 2)
     expect(e2.hp).toBe(10)
@@ -310,7 +312,7 @@ describe('processEnemyTurns', () => {
 
   it('enemy moves toward player when in aggro range', () => {
     // Place enemy at (5,5), player at (1,1) — within 12 Manhattan distance
-    const enemy: EnemyInstance = { id: 1, defKey: 'crawler', x: 5, y: 5, hp: 6, maxHp: 6, turnDebt: 0 }
+    const enemy: EnemyInstance = { id: 1, defKey: 'crawler', x: 5, y: 5, hp: 6, maxHp: 6, turnDebt: 0, isAttacking: false }
     const state = makeGameState({
       position: { x: 1, y: 1 },
       enemies: [enemy],
@@ -324,7 +326,7 @@ describe('processEnemyTurns', () => {
   })
 
   it('enemy does not move when out of aggro range (> 12 tiles)', () => {
-    const enemy: EnemyInstance = { id: 1, defKey: 'crawler', x: 9, y: 9, hp: 6, maxHp: 6, turnDebt: 0 }
+    const enemy: EnemyInstance = { id: 1, defKey: 'crawler', x: 9, y: 9, hp: 6, maxHp: 6, turnDebt: 0, isAttacking: false }
     const state = makeGameState({
       position: { x: 1, y: 1 },  // distance 16, > AGGRO_RANGE(12)
       enemies: [enemy],
@@ -336,7 +338,7 @@ describe('processEnemyTurns', () => {
   })
 
   it('adjacent enemy attacks player and reduces HP', () => {
-    const enemy: EnemyInstance = { id: 1, defKey: 'crawler', x: 2, y: 1, hp: 6, maxHp: 6, turnDebt: 0 }
+    const enemy: EnemyInstance = { id: 1, defKey: 'crawler', x: 2, y: 1, hp: 6, maxHp: 6, turnDebt: 0, isAttacking: false }
     const state = makeGameState({
       position: { x: 1, y: 1 },
       enemies: [enemy],
@@ -349,7 +351,7 @@ describe('processEnemyTurns', () => {
 
   it('slow enemy (speed=2) skips every other turn', () => {
     // speed=2 means acts when turnDebt >= 2
-    const enemy: EnemyInstance = { id: 1, defKey: 'sentinel', x: 5, y: 5, hp: 18, maxHp: 18, turnDebt: 0 }
+    const enemy: EnemyInstance = { id: 1, defKey: 'sentinel', x: 5, y: 5, hp: 18, maxHp: 18, turnDebt: 0, isAttacking: false }
     const state = makeGameState({
       position: { x: 1, y: 1 },
       enemies: [enemy],
@@ -366,7 +368,7 @@ describe('processEnemyTurns', () => {
   })
 
   it('enemy does not walk into player cell', () => {
-    const enemy: EnemyInstance = { id: 1, defKey: 'crawler', x: 2, y: 1, hp: 6, maxHp: 6, turnDebt: 0 }
+    const enemy: EnemyInstance = { id: 1, defKey: 'crawler', x: 2, y: 1, hp: 6, maxHp: 6, turnDebt: 0, isAttacking: false }
     const state = makeGameState({
       position: { x: 1, y: 1 },
       enemies: [enemy],
@@ -377,8 +379,8 @@ describe('processEnemyTurns', () => {
   })
 
   it('two enemies do not stack on same cell', () => {
-    const e1: EnemyInstance = { id: 1, defKey: 'crawler', x: 3, y: 1, hp: 6, maxHp: 6, turnDebt: 0 }
-    const e2: EnemyInstance = { id: 2, defKey: 'crawler', x: 4, y: 1, hp: 6, maxHp: 6, turnDebt: 0 }
+    const e1: EnemyInstance = { id: 1, defKey: 'crawler', x: 3, y: 1, hp: 6, maxHp: 6, turnDebt: 0, isAttacking: false }
+    const e2: EnemyInstance = { id: 2, defKey: 'crawler', x: 4, y: 1, hp: 6, maxHp: 6, turnDebt: 0, isAttacking: false }
     const state = makeGameState({
       position: { x: 1, y: 1 },
       enemies: [e1, e2],
@@ -390,7 +392,7 @@ describe('processEnemyTurns', () => {
 
   it('triggers game over when player HP reaches 0', () => {
     // crawler: speed=1, attack=2. Start with hp=1 and turnDebt=0 so it acts immediately.
-    const enemy: EnemyInstance = { id: 1, defKey: 'crawler', x: 2, y: 1, hp: 6, maxHp: 6, turnDebt: 0 }
+    const enemy: EnemyInstance = { id: 1, defKey: 'crawler', x: 2, y: 1, hp: 6, maxHp: 6, turnDebt: 0, isAttacking: false }
     const state = makeGameState({
       position: { x: 1, y: 1 },
       hp: 1,

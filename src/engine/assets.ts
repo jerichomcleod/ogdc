@@ -13,6 +13,27 @@ const DOOR_OPEN_PATHS   = ['door_opened_1.png','door_opened_2.png','door_open_3.
 const STAIR_DOWN_PATH   = `${BASE}stair_down.png`
 const STAIR_UP_PATH     = `${BASE}stair_up.png`
 
+// ── Enemy sprite paths ────────────────────────────────────────────────────────
+// Organised as: ENEMY_SPRITE_PATHS[defKey][phase][frameIdx]
+const ENEMY_SPRITE_PATHS: Record<string, Record<string, string[]>> = {
+  crawler: {
+    stand:  [1,2,3].map(n => `${BASE}enemy_crawler_stand_${n}.png`),
+    attack: [1,2,3].map(n => `${BASE}enemy_crawler_attack_${n}.png`),
+    dead:   [1,2].map(n => `${BASE}enemy_crawler_dead_${n}.png`),
+  },
+  shade: {
+    stand:  [1,2].map(n => `${BASE}enemy_shade_stand_${n}.png`),
+    attack: [1,2].map(n => `${BASE}enemy_shade_attack_${n}.png`),
+    dead:   [1,2].map(n => `${BASE}enemy_shade_dead_${n}.png`),
+  },
+}
+
+// ── Item sprite paths ─────────────────────────────────────────────────────────
+const ITEM_SPRITE_PATHS: Record<string, string> = {
+  potion_sm: `${BASE}potion_small.png`,
+  potion_lg: `${BASE}potion_large.png`,
+}
+
 const WALL_PATHS_BY_THEME: Record<string, string[]> = {
   stone:    STONE_PATH,
   catacomb: CATACOMB_PATH,
@@ -69,11 +90,16 @@ function splitCSVLine(line: string): string[] {
 }
 
 export async function preloadAssets(): Promise<void> {
+  const enemySpritePaths = Object.values(ENEMY_SPRITE_PATHS)
+    .flatMap(phases => Object.values(phases).flat())
+
   const all = [
     ...STONE_PATH, ...CATACOMB_PATH, ...MACHINE_PATH,
     ...FLOOR_PATHS, ...CEIL_PATHS,
     ...DOOR_CLOSED_PATHS, ...DOOR_OPEN_PATHS,
     STAIR_DOWN_PATH, STAIR_UP_PATH,
+    ...enemySpritePaths,
+    ...Object.values(ITEM_SPRITE_PATHS),
   ]
   const imgs = await Promise.all(all.map(loadImage))
 
@@ -165,6 +191,27 @@ export function getStairDownPixels(): TexPixels | undefined {
 }
 export function getStairUpPixels(): TexPixels | undefined {
   return pixelCache.get(cache.get(STAIR_UP_PATH)?.src ?? '')
+}
+
+/**
+ * Get pixel data for an enemy sprite.
+ * @param defKey   Enemy definition key (e.g. 'crawler', 'shade')
+ * @param phase    'stand' | 'attack' | 'dead'
+ * @param frameIdx 0-based frame index within that phase
+ */
+export function getEnemySpritePixels(
+  defKey: string, phase: string, frameIdx: number
+): TexPixels | undefined {
+  const paths = ENEMY_SPRITE_PATHS[defKey]?.[phase]
+  if (!paths?.length) return undefined
+  const path = paths[frameIdx % paths.length]
+  return pixelCache.get(cache.get(path)?.src ?? '')
+}
+
+export function getItemSpritePixels(defKey: string): TexPixels | undefined {
+  const path = ITEM_SPRITE_PATHS[defKey]
+  if (!path) return undefined
+  return pixelCache.get(cache.get(path)?.src ?? '')
 }
 
 export function getDeadEndText(theme: string): string {

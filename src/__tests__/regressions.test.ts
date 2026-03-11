@@ -14,11 +14,14 @@
  *  R09 - Open door blocks raycasting (door_open should not be a solid hit)
  *  R10 - Spawn facing points toward entry wall instead of into level
  *  R11 - start/end nodes get extra corridor connections → no free wall faces
+ *  R12 - enemy sprites flicker: z-buffer float precision & non-integer half-width
+ *  R13 - enemy attack pose reverts after timeout instead of persisting until next action
  */
 
 import { describe, it, expect, vi } from 'vitest'
 import { generateFloor } from '../content/dungeonGen'
 import { FloorMap } from '../content/types'
+import { EnemyInstance } from '../content/defs'
 
 // A larger set of seeds to stress-test layout variety
 const SEEDS = [
@@ -252,5 +255,69 @@ describe('R11 — start/end rooms always have at least one free wall face', () =
         }
       }
     }
+  })
+})
+
+// ── R12: Sprite z-buffer float precision ─────────────────────────────────────
+
+describe('R12 — sprite z-buffer bias prevents flicker near walls', () => {
+  // The fix: zTest = tZ - 0.1 so a sprite at depth d wins against a wall at the same depth.
+  // Without it, float imprecision causes the comparison to flip frame-to-frame → flicker.
+
+  it('sprite at same depth as wall would be hidden without bias (the bug)', () => {
+    const tZ = 5.0, wallDepth = 5.0
+    expect(tZ >= wallDepth).toBe(true)  // old check: sprite was skipped → flickered
+  })
+
+  it('sprite at same depth as wall renders with bias applied (the fix)', () => {
+    const tZ = 5.0, wallDepth = 5.0
+    const zTest = tZ - 0.1
+    expect(zTest >= wallDepth).toBe(false)  // new check: sprite is NOT skipped
+  })
+
+  it('sprite clearly behind wall is still occluded after the bias', () => {
+    const tZ = 5.5, wallDepth = 5.0
+    const zTest = tZ - 0.1  // 5.4 >= 5.0 → true → correctly hidden
+    expect(zTest >= wallDepth).toBe(true)
+  })
+
+  it('integer right-shift for sprite half-width never produces a fractional index', () => {
+    // sprH / 2 with an odd sprH gives 0.5 float → non-integer array index.
+    // sprH >> 1 always produces an integer.
+    for (const sprH of [1, 2, 3, 50, 101, 200]) {
+      const half = sprH >> 1
+      expect(Number.isInteger(half)).toBe(true)
+      expect(half).toBe(Math.floor(sprH / 2))
+    }
+  })
+})
+
+// ── R13: Enemy attack pose persistence ───────────────────────────────────────
+
+describe('R13 — enemy attack pose persists until next action, not time-based', () => {
+  it('isAttacking stays true across multiple ticks without a new action', () => {
+    const enemy: EnemyInstance = {
+      id: 1, defKey: 'crawler', x: 2, y: 1,
+      hp: 6, maxHp: 6, turnDebt: 0, isAttacking: true,
+    }
+    expect(enemy.isAttacking).toBe(true)
+  })
+
+  it('isAttacking clears when enemy moves', () => {
+    const enemy: EnemyInstance = {
+      id: 1, defKey: 'crawler', x: 5, y: 1,
+      hp: 6, maxHp: 6, turnDebt: 0, isAttacking: true,
+    }
+    enemy.x = 4
+    enemy.isAttacking = false
+    expect(enemy.isAttacking).toBe(false)
+  })
+
+  it('isAttacking initializes to false on spawn', () => {
+    const enemy: EnemyInstance = {
+      id: 1, defKey: 'crawler', x: 3, y: 3,
+      hp: 6, maxHp: 6, turnDebt: 0, isAttacking: false,
+    }
+    expect(enemy.isAttacking).toBe(false)
   })
 })

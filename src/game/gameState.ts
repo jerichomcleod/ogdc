@@ -1,9 +1,9 @@
 import { Direction } from '../content/types'
 import { LEVEL_SEQUENCE, LevelId, getFloor, regenerateDungeons } from '../content/floors'
-import { EnemyInstance, ItemInstance } from '../content/defs'
+import { EnemyInstance, ItemInstance, Corpse } from '../content/defs'
 import { getGameOverText } from '../engine/assets'
 
-export type { EnemyInstance, ItemInstance }
+export type { EnemyInstance, ItemInstance, Corpse }
 
 export interface CamAnim {
   type:        'forward' | 'back' | 'turn_left' | 'turn_right'
@@ -22,6 +22,7 @@ export interface RunState {
   floorFlags:   Record<string, boolean>
   anim:         CamAnim | null
   enemies:      EnemyInstance[]
+  corpses:      Corpse[]          // recently killed enemies; cleared when player moves
   items:        ItemInstance[]    // items on the floor
   inventory:    ItemInstance[]    // items carried by the player
   combatLog:    string[]          // last 4 events, newest last
@@ -30,6 +31,7 @@ export interface RunState {
   deadEndMsg:       string            // current dead-end flavor text (empty = none)
   deadEndMs:        number | null     // when dead-end message was triggered
   entitiesSpawned:  boolean          // true after first entity spawn; prevents respawn on kill-all
+  lastHitMs:        number            // performance.now() of last hit taken; drives red flash
 }
 
 export type GameMode = 'dungeon' | 'game_over' | 'town'
@@ -44,6 +46,8 @@ export interface GameState {
   gameOverMessage:    string   // death flavor text, picked once
   gameOverMenuIndex:  number   // 0=New Game, 1=Load Game
   shownLevelEntries:  Set<string>  // floors whose entry message has been shown this run
+  gameTick:           number       // increments each time the player acts; drives sprite frame selection
+  enemyMoveMs:        number       // performance.now() when last enemy turn was processed; drives move animation
 }
 
 export function pushCombatLog(run: RunState, msg: string): void {
@@ -67,6 +71,7 @@ function makeRunState(floorId: LevelId, hp: number, maxHp: number): RunState {
     floorFlags:   {},
     anim:         null,
     enemies:      [],
+    corpses:      [],
     items:        [],
     inventory:    [],
     combatLog:    [],
@@ -75,6 +80,7 @@ function makeRunState(floorId: LevelId, hp: number, maxHp: number): RunState {
     deadEndMsg:       '',
     deadEndMs:        null,
     entitiesSpawned:  false,
+    lastHitMs:        0,
   }
 }
 
@@ -92,6 +98,8 @@ export function makeInitialState(): GameState {
     gameOverMessage:    '',
     gameOverMenuIndex:  0,
     shownLevelEntries:  new Set(),
+    gameTick:           0,
+    enemyMoveMs:        0,
   }
 }
 
@@ -134,6 +142,7 @@ export function goUp(state: GameState): void {
     floorFlags:   {},
     anim:         null,
     enemies:      [],
+    corpses:      [],
     items:        [],
     inventory,
     combatLog:    [],
@@ -142,6 +151,7 @@ export function goUp(state: GameState): void {
     deadEndMsg:       '',
     deadEndMs:        null,
     entitiesSpawned:  false,
+    lastHitMs:        0,
   }
 }
 
@@ -160,6 +170,7 @@ export function returnToDungeon(state: GameState): void {
     floorFlags:   {},
     anim:         null,
     enemies:      [],
+    corpses:      [],
     items:        [],
     inventory,
     combatLog:    [],
@@ -168,6 +179,7 @@ export function returnToDungeon(state: GameState): void {
     deadEndMsg:       '',
     deadEndMs:        null,
     entitiesSpawned:  false,
+    lastHitMs:        0,
   }
 }
 

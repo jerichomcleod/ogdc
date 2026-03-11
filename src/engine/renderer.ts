@@ -13,7 +13,7 @@ import { getCtx } from './canvas'
 import { GameState } from '../game/gameState'
 import { getCell } from '../systems/mapSystem'
 import { Direction } from '../content/types'
-import { getWallPixels, getFloorPixels, getCeilPixels, getDoorClosedPixels, getDoorOpenPixels, getStairDownPixels, getStairUpPixels } from './assets'
+import { getWallPixels, getFloorPixels, getCeilPixels, getDoorClosedPixels, getDoorOpenPixels, getStairDownPixels, getStairUpPixels, getEnemySpritePixels, getItemSpritePixels, TexPixels } from './assets'
 import { getFloor } from '../content/floors'
 import { getEnemyDef, getItemDef } from '../content/defs'
 import { CANVAS_W, DUNGEON_H, HORIZON_Y } from '../constants'
@@ -133,11 +133,12 @@ function shade(px: number, s: number): number {
 // ── Core render ──────────────────────────────────────────────────────────────
 
 export interface Sprite {
-  wx:     number   // world X (cell centre = x + 0.5)
-  wy:     number   // world Y
-  color:  number   // packed Uint32
-  scaleH: number   // height as fraction of wall face at same distance (1 = full)
-  offY:   number   // vertical offset as fraction (+ = down toward floor)
+  wx:      number         // world X (cell centre = x + 0.5)
+  wy:      number         // world Y
+  color:   number         // fallback packed Uint32 (used when no pixels)
+  scaleH:  number         // height as fraction of wall face at same distance (1 = full)
+  offY:    number         // vertical offset as fraction (+ = down toward floor)
+  pixels?: TexPixels      // optional texture; if present, overrides solid color
 }
 
 // Pre-allocated z-buffer (one entry per screen column, filled each wall pass)
@@ -173,9 +174,10 @@ function renderToBuffer(
     const row = y * CANVAS_W
     if (y === HORIZON_Y) { out.fill(0xFF000000, row, row + CANVAS_W); continue }
 
-    const isFloor = y > HORIZON_Y
-    const rowDist = isFloor ? HORIZON_Y / (y - HORIZON_Y) : HORIZON_Y / (HORIZON_Y - y)
-    const src     = isFloor ? floorPix : ceilPix
+    const isFloor  = y > HORIZON_Y
+    const rowDist  = isFloor ? HORIZON_Y / (y - HORIZON_Y) : HORIZON_Y / (HORIZON_Y - y)
+    const src      = isFloor ? floorPix : ceilPix
+    const darkFrac = Math.min(1, rowDist / SHADE_END)
 
     if (src) {
       const { pixels, w, h } = src
@@ -184,12 +186,13 @@ function renderToBuffer(
       const stepX = rowDist * (rx - lx) / CANVAS_W
       const stepY = rowDist * (ry - ly) / CANVAS_W
       for (let x = 0; x < CANVAS_W; x++, fx += stepX, fy += stepY) {
-        const tx = ((Math.floor(fx * w) % w) + w) % w
-        const ty = ((Math.floor(fy * h) % h) + h) % h
-        out[row + x] = pixels[ty * w + tx]
+        const tx  = ((Math.floor(fx * w) % w) + w) % w
+        const ty  = ((Math.floor(fy * h) % h) + h) % h
+        out[row + x] = shade(pixels[ty * w + tx], darkFrac)
       }
     } else {
-      out.fill(isFloor ? rgba(45, 35, 20) : rgba(18, 12, 10), row, row + CANVAS_W)
+      const base = isFloor ? rgba(45, 35, 20) : rgba(18, 12, 10)
+      out.fill(shade(base, darkFrac), row, row + CANVAS_W)
     }
   }
 
@@ -309,18 +312,38 @@ function renderToBuffer(
     const screenCX = Math.floor(CANVAS_W / 2 * (1 + tX / tZ))
     const faceH    = DUNGEON_H / tZ                       // face height at this depth
     const sprH     = Math.floor(faceH * s.scaleH)
-    const sprW     = sprH
+    const half     = sprH >> 1  // integer half-width/height avoids float column drift
 
     const screenCY = HORIZON_Y + Math.floor(faceH * s.offY)
-    const drawT    = Math.max(0,          screenCY - sprH / 2)
-    const drawB    = Math.min(DUNGEON_H - 1, screenCY + sprH / 2)
-    const drawL    = Math.max(0,          screenCX - sprW / 2)
-    const drawR    = Math.min(CANVAS_W - 1, screenCX + sprW / 2)
+    const drawT    = Math.max(0,          screenCY - half)
+    const drawB    = Math.min(DUNGEON_H - 1, screenCY + half)
+    const drawL    = Math.max(0,          screenCX - half)
+    const drawR    = Math.min(CANVAS_W - 1, screenCX + half)
 
+    // Z-bias: sprites within 0.1 cells of a wall win the depth test so they
+    // don't flicker when standing adjacent to a wall (float precision issue).
+    const zTest    = tZ - 0.1
+    const darkFrac = Math.min(1, tZ / SHADE_END)
+
+    const tex = s.pixels
     for (let sx = drawL; sx <= drawR; sx++) {
-      if (tZ >= _zBuf[sx]) continue  // behind wall
-      for (let sy = drawT; sy <= drawB; sy++) {
-        out[sy * CANVAS_W + sx] = s.color
+      if (zTest >= _zBuf[sx]) continue  // behind wall
+      if (tex) {
+        // Textured sprite — sample the PNG pixel data, apply distance fade
+        const u = Math.floor(((sx - drawL) / Math.max(1, drawR - drawL)) * tex.w)
+        for (let sy = drawT; sy <= drawB; sy++) {
+          const v    = Math.floor(((sy - drawT) / Math.max(1, drawB - drawT)) * tex.h)
+          const raw  = tex.pixels[v * tex.w + u] ?? 0
+          const a    = (raw >>> 24) & 0xFF
+          if (a < 128) continue   // transparent pixel
+          out[sy * CANVAS_W + sx] = shade(raw, darkFrac)
+        }
+      } else {
+        // Solid colour fallback with distance fade
+        const shaded = shade(s.color, darkFrac)
+        for (let sy = drawT; sy <= drawB; sy++) {
+          out[sy * CANVAS_W + sx] = shaded
+        }
       }
     }
   }
@@ -360,17 +383,39 @@ export function renderDungeon(state: GameState): void {
   const anim  = run.anim
   const theme = getFloor(run.floorId)?.theme ?? 'stone'
 
-  // Build sprite list from enemies + items on the current floor
+  const now = performance.now()
+
+  // Pick the correct sprite pixels for a live enemy.
+  // Always frame 0 (_1 sprite). Phase set by enemy's persistent isAttacking flag.
+  function enemyPixels(defKey: string, isAttacking: boolean): TexPixels | undefined {
+    return getEnemySpritePixels(defKey, isAttacking ? 'attack' : 'stand', 0)
+  }
+
+  // Smooth enemy movement: interpolate from fromX/fromY → x/y over ENEMY_MOVE_MS.
+  const ENEMY_MOVE_MS = 250
+  const rawT    = Math.min(1, (now - state.enemyMoveMs) / ENEMY_MOVE_MS)
+  const enemyT  = rawT * rawT * (3 - 2 * rawT)   // smoothstep
+
+  // Build sprite list from enemies + corpses + items on the current floor
   const sprites: Sprite[] = [
     ...run.enemies.map(e => ({
-      wx: e.x + 0.5, wy: e.y + 0.5,
+      wx: e.fromX + (e.x - e.fromX) * enemyT + 0.5,
+      wy: e.fromY + (e.y - e.fromY) * enemyT + 0.5,
       color: (getEnemyDef(e.defKey)?.color ?? 0xFF00FFFF),
-      scaleH: 0.75, offY: 0,
+      scaleH: 0.65, offY: 0.18,
+      pixels: enemyPixels(e.defKey, e.isAttacking),
+    })),
+    ...run.corpses.map(c => ({
+      wx: c.x + 0.5, wy: c.y + 0.5,
+      color: (getEnemyDef(c.defKey)?.color ?? 0xFF404040),
+      scaleH: 0.72, offY: 0.22,
+      pixels: getEnemySpritePixels(c.defKey, 'dead', 0),
     })),
     ...run.items.map(it => ({
       wx: it.x + 0.5, wy: it.y + 0.5,
       color: (getItemDef(it.defKey)?.color ?? 0xFF00FF00),
-      scaleH: 0.28, offY: 0.35,
+      scaleH: 0.5, offY: 0,
+      pixels: getItemSpritePixels(it.defKey),
     })),
   ]
 
@@ -384,12 +429,16 @@ export function renderDungeon(state: GameState): void {
     const t = Math.min(1, (performance.now() - anim.startMs) / anim.durationMs)
 
     if (anim.type === 'forward' || anim.type === 'back') {
-      // Shift the camera position toward the previous cell (ease-out quadratic).
-      const [fdx, fdy] = dirVec(run.facing)
-      const ease = (1 - t) * (1 - t)
-      const off  = anim.type === 'forward' ? ease : -ease
-      posX -= fdx * off
-      posY -= fdy * off
+      // For forward steps, slide the camera from the old cell to the new cell.
+      // For back steps we do NOT shift the camera: the old position is 1 cell
+      // closer to any enemy in front, which makes sprites blow up in size.
+      // Keeping the camera at the new position avoids that artifact.
+      if (anim.type === 'forward') {
+        const [fdx, fdy] = dirVec(run.facing)
+        const ease = (1 - t) * (1 - t)
+        posX -= fdx * ease
+        posY -= fdy * ease
+      }
 
     } else {
       isTurn = true
@@ -424,5 +473,14 @@ export function renderDungeon(state: GameState): void {
     // Render directly into the pre-allocated buffer, one putImageData call.
     renderToBuffer(_outBuf, run.floorId, theme, posX, posY, facing, sprites)
     ctx.putImageData(_imgData, 0, 0)
+  }
+
+  // Red hit flash — sin curve so it fades in then out over HIT_FLASH_MS.
+  const HIT_FLASH_MS = 245
+  const hitElapsed   = now - run.lastHitMs
+  if (hitElapsed < HIT_FLASH_MS) {
+    const alpha = Math.sin(Math.PI * hitElapsed / HIT_FLASH_MS) * 0.27
+    ctx.fillStyle = `rgba(220,0,0,${alpha.toFixed(3)})`
+    ctx.fillRect(0, 0, CANVAS_W, DUNGEON_H)
   }
 }

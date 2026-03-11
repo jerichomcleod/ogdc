@@ -26,8 +26,17 @@ function update(state: GameState): void {
       processMovement(state)
       tickAnim(state)
       if (state.run.playerActed) {
+        state.gameTick++
         processEnemyTurns(state)
+        state.enemyMoveMs = performance.now()
         state.run.playerActed = false
+      }
+      // Remove corpses from any previous position once player has moved away
+      if (state.run.corpses.length) {
+        const px = state.run.position.x, py = state.run.position.y
+        state.run.corpses = state.run.corpses.filter(
+          c => c.killedFromX === px && c.killedFromY === py
+        )
       }
       break
 

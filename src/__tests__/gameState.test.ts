@@ -152,7 +152,7 @@ describe('advanceLevel', () => {
 
   it('resets enemies to empty on new floor', () => {
     const s = makeInitialState()
-    s.run.enemies = [{ id: 1, defKey: 'crawler', x: 2, y: 2, hp: 6, maxHp: 6, turnDebt: 0 }]
+    s.run.enemies = [{ id: 1, defKey: 'crawler', x: 2, y: 2, hp: 6, maxHp: 6, turnDebt: 0, isAttacking: false }]
     advanceLevel(s)
     expect(s.run.enemies).toHaveLength(0)
   })
@@ -287,7 +287,7 @@ describe('pushCombatLog', () => {
       hp: 60, maxHp: 60, mapRevealed: [], floorFlags: {}, anim: null,
       enemies: [], items: [], inventory: [], combatLog: [],
       levelEntryMs: 0, playerActed: false, deadEndMsg: '', deadEndMs: null,
-      entitiesSpawned: false,
+      entitiesSpawned: false, corpses: [],
     }
   }
 

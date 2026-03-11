@@ -3,7 +3,7 @@
  */
 
 import { GameState, RunState, pushCombatLog, triggerGameOver } from '../game/gameState'
-import { EnemyInstance, ItemInstance, ENEMY_DEFS, ITEM_DEFS, getEnemyDef, getItemDef } from '../content/defs'
+import { EnemyInstance, ItemInstance, Corpse, ENEMY_DEFS, ITEM_DEFS, getEnemyDef, getItemDef } from '../content/defs'
 import { getFloor } from '../content/floors'
 import { makeRng } from '../content/dungeonGen'
 import { isPassable } from './mapSystem'
@@ -65,7 +65,7 @@ export function generateEntities(floorId: string, worldSeed: number, levelIndex:
     if (used.has(k)) { i--; continue }
     used.add(k)
     const def = eligible[Math.floor(r() * eligible.length)]
-    enemies.push({ id: _nextId++, defKey: def.key, x, y, hp: def.hp, maxHp: def.hp, turnDebt: 0 })
+    enemies.push({ id: _nextId++, defKey: def.key, x, y, fromX: x, fromY: y, hp: def.hp, maxHp: def.hp, turnDebt: 0, isAttacking: false })
   }
 
   // Items
@@ -136,6 +136,9 @@ export function processEnemyTurns(state: GameState): void {
   const py   = run.position.y
   const fid  = run.floorId
 
+  // Snapshot starting positions so the renderer can animate from here → new position
+  for (const e of run.enemies) { e.fromX = e.x; e.fromY = e.y }
+
   // Build occupied set from current enemy positions for collision avoidance
   const occupied = new Set<string>(run.enemies.map(e => `${e.x},${e.y}`))
 
@@ -151,12 +154,16 @@ export function processEnemyTurns(state: GameState): void {
 
     // Attack if adjacent to player
     if (dist === 1) {
+      enemy.isAttacking = true
       dealDamageToPlayer(state, enemy.defKey, def.attack)
       continue
     }
 
     // Move toward player if in aggro range
-    if (dist > AGGRO_RANGE) continue
+    if (dist > AGGRO_RANGE) {
+      enemy.isAttacking = false
+      continue
+    }
 
     // Remove self from occupied before pathfinding so we can move into our own cell
     occupied.delete(`${enemy.x},${enemy.y}`)
@@ -167,6 +174,7 @@ export function processEnemyTurns(state: GameState): void {
       occupied.add(`${nx},${ny}`)
       enemy.x = nx
       enemy.y = ny
+      enemy.isAttacking = false
     } else {
       occupied.add(`${enemy.x},${enemy.y}`)
     }
@@ -177,6 +185,7 @@ function dealDamageToPlayer(state: GameState, defKey: string, attack: number): v
   const def = getEnemyDef(defKey)
   const name = def?.name ?? 'Something'
   state.run.hp -= attack
+  state.run.lastHitMs = performance.now()
   pushCombatLog(state.run, `The ${name} hits you for ${attack} damage.`)
   if (state.run.hp <= 0) {
     state.run.hp = 0
@@ -201,7 +210,15 @@ export function playerAttack(run: RunState, tx: number, ty: number): boolean {
 
   enemy.hp -= dmg
   if (enemy.hp <= 0) {
+    // Remove from enemies and leave a corpse at the kill site
     run.enemies.splice(idx, 1)
+    const corpse: Corpse = {
+      x: tx, y: ty,
+      defKey: enemy.defKey,
+      killedFromX: run.position.x,
+      killedFromY: run.position.y,
+    }
+    run.corpses.push(corpse)
     pushCombatLog(run, `You kill the ${name}.`)
   } else {
     pushCombatLog(run, `You hit the ${name} for ${dmg}. (${enemy.hp}/${enemy.maxHp} HP)`)
