@@ -354,7 +354,7 @@ function rasterize(graph: DunGraph, positions: Map<number, RoomPos>, r: () => nu
       const bOpen = floorNeighbourCount(b.x, b.y, x, y) > 1
       if (!aOpen && !bOpen) continue
 
-      if (r() < 0.18) {
+      if (r() < 0.09) {
         cells[y][x] = { type: 'wall', wallOverride: 'door_closed' }
       }
     }
