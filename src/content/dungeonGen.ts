@@ -379,6 +379,14 @@ function rasterize(graph: DunGraph, positions: Map<number, RoomPos>, r: () => nu
       [ 0, -1, 'north'], [ 1,  0, 'east'],
       [ 0,  1, 'south'], [-1,  0, 'west'],
     ]
+    // Count how many floor cells are cardinally adjacent to a wall cell.
+    // A "clean face" wall has exactly 1 floor neighbour — it is a flat side,
+    // not a corner touching the room on two sides.
+    function floorNeighbours(wx: number, wy: number): number {
+      return CARD.reduce((n, [d0, d1]) =>
+        n + (cells[wy + d1]?.[wx + d0]?.type === 'floor' ? 1 : 0), 0)
+    }
+
     for (let dy = -hs; dy <= hs; dy++) {
       for (let dx = -hs; dx <= hs; dx++) {
         const fx = cx + dx, fy = cy + dy
@@ -387,7 +395,7 @@ function rasterize(graph: DunGraph, positions: Map<number, RoomPos>, r: () => nu
         for (const [wdx, wdy, facing] of CARD) {
           const wx = fx + wdx, wy = fy + wdy
           if (wx < 0 || wx >= cellW || wy < 0 || wy >= cellH) continue
-          if (cells[wy][wx].type === 'wall') {
+          if (cells[wy][wx].type === 'wall' && floorNeighbours(wx, wy) === 1) {
             return { wallX: wx, wallY: wy, floorX: fx, floorY: fy, facing }
           }
         }
