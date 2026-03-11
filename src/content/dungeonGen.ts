@@ -375,16 +375,20 @@ function rasterize(graph: DunGraph, positions: Map<number, RoomPos>, r: () => nu
   if (entrySlot) cells[entrySlot.wallY][entrySlot.wallX] = { type: 'wall', wallOverride: 'stairs_up' }
   if (exitSlot)  cells[exitSlot.wallY][exitSlot.wallX]   = { type: 'wall', wallOverride: 'stairs_down' }
 
+  function oppDir(f: Direction): Direction {
+    return f === 'north' ? 'south' : f === 'south' ? 'north' : f === 'east' ? 'west' : 'east'
+  }
+
   return {
     cells, width: cellW, height: cellH,
     spawnX:       entrySlot?.floorX ?? spCx,
     spawnY:       entrySlot?.floorY ?? spCy,
-    spawnFacing:  entrySlot?.facing ?? 'north',
+    spawnFacing:  oppDir(entrySlot?.facing ?? 'north'),  // face INTO the level, away from entry
     exitX:        exitSlot?.wallX ?? epCx,
     exitY:        exitSlot?.wallY ?? epCy,
     returnX:      exitSlot?.floorX ?? epCx,
     returnY:      exitSlot?.floorY ?? epCy,
-    returnFacing: exitSlot?.facing ?? 'north',
+    returnFacing: oppDir(exitSlot?.facing ?? 'north'),   // face INTO the level when returning
     entryWallX:   entrySlot?.wallX ?? spCx,
     entryWallY:   entrySlot?.wallY ?? spCy,
   }

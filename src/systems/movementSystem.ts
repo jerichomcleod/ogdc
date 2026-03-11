@@ -2,6 +2,7 @@ import { GameState, advanceLevel, goUp, goToTown } from '../game/gameState'
 import { consumeAction } from '../engine/input'
 import { stepOffset, turnLeft, turnRight, isPassable, revealAround } from './mapSystem'
 import { getFloor } from '../content/floors'
+import { Cell } from '../content/types'
 import { playerAttack, tryPickupItem, useItem } from './entitySystem'
 import { getDeadEndText } from '../engine/assets'
 
@@ -106,14 +107,17 @@ function checkDeadEnd(state: GameState): void {
   if (!floor) return
   const { x, y } = run.position
 
-  // Count passable floor neighbors
+  // Count open neighbours — floor tiles OR passable/openable wall cells (doors).
+  // Doors are walls but not true dead ends; only solid walls count as blocked.
   const neighbors = [
     floor.cells[y - 1]?.[x],
     floor.cells[y + 1]?.[x],
     floor.cells[y]?.[x - 1],
     floor.cells[y]?.[x + 1],
   ]
-  const floorCount = neighbors.filter(c => c?.type === 'floor').length
+  const isDoorLike = (c: Cell | undefined) =>
+    c?.type === 'wall' && (c.wallOverride === 'door_closed' || c.wallOverride === 'door_open')
+  const floorCount = neighbors.filter(c => c?.type === 'floor' || isDoorLike(c)).length
 
   if (floorCount <= 1) {
     // Determine theme from floorId
@@ -140,7 +144,7 @@ function interactFacing(state: GameState): boolean {
   if (ty < 0 || ty >= floor.height || tx < 0 || tx >= floor.width) return false
   const cell = floor.cells[ty][tx]
   if (cell.wallOverride === 'door_closed') {
-    floor.cells[ty][tx] = { type: 'floor' }
+    floor.cells[ty][tx] = { type: 'wall', wallOverride: 'door_open' }
     return true
   }
   if (cell.wallOverride === 'stairs_down') {
