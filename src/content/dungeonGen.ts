@@ -317,11 +317,12 @@ function rasterize(graph: DunGraph, positions: Map<number, RoomPos>, r: () => nu
   const spawnX = toCx(sp.rx), spawnY = toCy(sp.ry)
   const exitX  = toCx(ep.rx), exitY  = toCy(ep.ry)
 
-  // ── Place doors selectively ───────────────────────────────────────────────
-  // A door requires either: a chokepoint corridor cell that borders a larger
-  // room (room cells have multiple floor neighbours), OR an intersection
-  // (3+ floor neighbours). Both cases use low probability.
-  function floorNeighbours(cx: number, cy: number, ex: number, ey: number): number {
+  // ── Place doors at corridor/room boundaries ───────────────────────────────
+  // Rule: the cell must be a strict corridor chokepoint (exactly 2 opposite
+  // floor neighbours). Additionally, at least one of those two neighbours must
+  // itself have >1 floor neighbours (i.e. it opens into a room or junction)
+  // so the door sits at the threshold, never floating inside open space.
+  function floorNeighbourCount(cx: number, cy: number, ex: number, ey: number): number {
     let n = 0
     for (const [ddx, ddy] of [[0,-1],[0,1],[1,0],[-1,0]] as [number,number][]) {
       const nx = cx + ddx, ny = cy + ddy
@@ -341,21 +342,19 @@ function rasterize(graph: DunGraph, positions: Map<number, RoomPos>, r: () => nu
       const sf = cells[y + 1][x].type === 'floor'
       const ef = cells[y][x + 1].type === 'floor'
       const wf = cells[y][x - 1].type === 'floor'
-      const total = +nf + +sf + +ef + +wf
 
-      const isChokepoint   = (nf && sf && !ef && !wf) || (!nf && !sf && ef && wf)
-      const isIntersection = total >= 3
+      // Must be a strict corridor chokepoint — exactly 2 opposite floor neighbours
+      const isChokepoint = (nf && sf && !ef && !wf) || (!nf && !sf && ef && wf)
+      if (!isChokepoint) continue
 
-      if (isChokepoint) {
-        // Only place a door if one of the two corridor neighbours borders a
-        // larger room (i.e. has >1 floor neighbours itself, implying open space).
-        const [a, b] = nf ? [[x, y-1],[x, y+1]] : [[x+1, y],[x-1, y]]
-        const nearRoom = floorNeighbours(a[0], a[1], x, y) > 1
-                      || floorNeighbours(b[0], b[1], x, y) > 1
-        if (nearRoom && r() < 0.18) {
-          cells[y][x] = { type: 'wall', wallOverride: 'door_closed' }
-        }
-      } else if (isIntersection && r() < 0.06) {
+      // At least one neighbour must open into a room or junction (>1 other floor neighbours)
+      const [a, b] = nf ? [{ x, y: y-1 }, { x, y: y+1 }]
+                        : [{ x: x+1, y }, { x: x-1, y }]
+      const aOpen = floorNeighbourCount(a.x, a.y, x, y) > 1
+      const bOpen = floorNeighbourCount(b.x, b.y, x, y) > 1
+      if (!aOpen && !bOpen) continue
+
+      if (r() < 0.18) {
         cells[y][x] = { type: 'wall', wallOverride: 'door_closed' }
       }
     }
