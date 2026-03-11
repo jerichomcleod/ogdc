@@ -1,4 +1,4 @@
-import { GameState, advanceLevel } from '../game/gameState'
+import { GameState, advanceLevel, goUp, goToTown } from '../game/gameState'
 import { consumeAction } from '../engine/input'
 import { stepOffset, turnLeft, turnRight, isPassable, revealAround } from './mapSystem'
 import { getFloor } from '../content/floors'
@@ -36,8 +36,6 @@ export function processMovement(state: GameState): void {
       revealAround(state)
       tryPickupItem(run, nx, ny)
       run.anim = { type: 'forward', prevFacing: prev, startMs: performance.now(), durationMs: MOVE_MS }
-      const floor = getFloor(run.floorId)
-      if (floor && nx === floor.exitX && ny === floor.exitY) advanceLevel(state)
     }
 
   } else if (consumeAction('MOVE_BACK')) {
@@ -110,6 +108,18 @@ function interactFacing(state: GameState): boolean {
   const cell = floor.cells[ty][tx]
   if (cell.wallOverride === 'door_closed') {
     floor.cells[ty][tx] = { type: 'floor' }
+    return true
+  }
+  if (cell.wallOverride === 'stairs_down') {
+    advanceLevel(state)
+    return true
+  }
+  if (cell.wallOverride === 'stairs_up') {
+    goUp(state)
+    return true
+  }
+  if (cell.wallOverride === 'town_gate') {
+    goToTown(state)
     return true
   }
   return false

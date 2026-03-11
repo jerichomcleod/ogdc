@@ -23,7 +23,7 @@ function scaleToWindow(): void {
   const controlsH = controls?.offsetHeight ?? 220
   const availH    = window.innerHeight - controlsH
   const scale     = Math.min(window.innerWidth / CANVAS_W, availH / CANVAS_H)
-  const clamped   = Math.max(0.4, scale)
+  const clamped   = Math.max(0.52, scale)
   const cssW = Math.floor(CANVAS_W * clamped)
   const cssH = Math.floor(CANVAS_H * clamped)
   _canvas.style.width  = `${cssW}px`

@@ -28,13 +28,14 @@ export interface RunState {
   playerActed:  boolean           // set true when player takes a turn action
 }
 
-export type GameMode = 'dungeon' | 'game_over'
+export type GameMode = 'dungeon' | 'game_over' | 'town'
 
 export interface GameState {
-  mode:       GameMode
-  run:        RunState
-  worldSeed:  number
-  levelIndex: number
+  mode:          GameMode
+  run:           RunState
+  worldSeed:     number
+  levelIndex:    number
+  townMenuIndex: number
 }
 
 export function pushCombatLog(run: RunState, msg: string): void {
@@ -42,7 +43,7 @@ export function pushCombatLog(run: RunState, msg: string): void {
   if (run.combatLog.length > 4) run.combatLog.shift()
 }
 
-function makeRevealedGrid(width: number, height: number): boolean[][] {
+export function makeRevealedGrid(width: number, height: number): boolean[][] {
   return Array.from({ length: height }, () => Array(width).fill(false))
 }
 
@@ -71,10 +72,11 @@ export function makeInitialState(): GameState {
   regenerateDungeons(worldSeed)
   const levelIndex = 0
   return {
-    mode:       'dungeon',
+    mode:          'dungeon',
     worldSeed,
     levelIndex,
-    run:        makeRunState(LEVEL_SEQUENCE[levelIndex], 60, 60),
+    townMenuIndex: 0,
+    run:           makeRunState(LEVEL_SEQUENCE[levelIndex], 60, 60),
   }
 }
 
@@ -92,4 +94,58 @@ export function advanceLevel(state: GameState): void {
   const { hp, maxHp, inventory } = state.run
   state.run           = makeRunState(LEVEL_SEQUENCE[state.levelIndex], hp, maxHp)
   state.run.inventory = inventory
+}
+
+export function goToTown(state: GameState): void {
+  state.mode = 'town'
+}
+
+/** Go to previous level, spawn at returnX/returnY of that level. If already level 0, go to town. */
+export function goUp(state: GameState): void {
+  if (state.levelIndex <= 0) {
+    goToTown(state)
+    return
+  }
+  const prev = state.levelIndex - 1
+  state.levelIndex = prev
+  const { hp, maxHp, inventory } = state.run
+  const floor = getFloor(LEVEL_SEQUENCE[prev])!
+  state.run = {
+    floorId:      LEVEL_SEQUENCE[prev],
+    position:     { x: floor.returnX, y: floor.returnY },
+    facing:       floor.returnFacing,
+    hp, maxHp,
+    mapRevealed:  makeRevealedGrid(floor.width, floor.height),
+    floorFlags:   {},
+    anim:         null,
+    enemies:      [],
+    items:        [],
+    inventory,
+    combatLog:    [],
+    levelEntryMs: performance.now(),
+    playerActed:  false,
+  }
+}
+
+/** Return from town back to dungeon level 0. */
+export function returnToDungeon(state: GameState): void {
+  const { hp, maxHp, inventory } = state.run
+  state.mode = 'dungeon'
+  state.levelIndex = 0
+  const floor = getFloor(LEVEL_SEQUENCE[0])!
+  state.run = {
+    floorId:      LEVEL_SEQUENCE[0],
+    position:     { x: floor.spawnX, y: floor.spawnY },
+    facing:       floor.spawnFacing,
+    hp, maxHp,
+    mapRevealed:  makeRevealedGrid(floor.width, floor.height),
+    floorFlags:   {},
+    anim:         null,
+    enemies:      [],
+    items:        [],
+    inventory,
+    combatLog:    [],
+    levelEntryMs: performance.now(),
+    playerActed:  false,
+  }
 }

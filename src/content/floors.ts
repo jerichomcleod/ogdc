@@ -38,7 +38,7 @@ export function getFloor(id: string): FloorMap | undefined {
   if (idx === -1) return undefined
   const theme = levelTheme(id as LevelId)
   const seed  = (worldSeed + idx * 0x3A7) >>> 0
-  const floor = generateFloor(id, theme, seed)
+  const floor = generateFloor(id, theme, seed, idx)
   floorCache.set(id, floor)
   return floor
 }

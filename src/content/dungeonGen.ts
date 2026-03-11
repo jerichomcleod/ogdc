@@ -15,7 +15,7 @@
  *   - Dead ends:   2–4 short dead-end stubs
  */
 
-import { FloorMap, Cell, CellType, FloorTheme } from './types'
+import { FloorMap, Cell, CellType, FloorTheme, Direction } from './types'
 
 // ── Seeded PRNG (Mulberry32) ──────────────────────────────────────────────────
 
@@ -237,13 +237,19 @@ const STRIDE = 3
 const MAP_BORDER = 1
 
 interface RasterResult {
-  cells:  Cell[][]
-  width:  number
-  height: number
-  spawnX: number
-  spawnY: number
-  exitX:  number
-  exitY:  number
+  cells:        Cell[][]
+  width:        number
+  height:       number
+  spawnX:       number   // floor cell adjacent to entryWall
+  spawnY:       number
+  spawnFacing:  Direction
+  exitX:        number   // WALL cell: stairs_down
+  exitY:        number
+  returnX:      number   // floor cell adjacent to exitX/Y (land here when ascending)
+  returnY:      number
+  returnFacing: Direction
+  entryWallX:   number   // WALL cell: stairs_up (caller may override to town_gate)
+  entryWallY:   number
 }
 
 function rasterize(graph: DunGraph, positions: Map<number, RoomPos>, r: () => number): RasterResult {
@@ -330,18 +336,69 @@ function rasterize(graph: DunGraph, positions: Map<number, RoomPos>, r: () => nu
     }
   }
 
-  return { cells, width: cellW, height: cellH, spawnX, spawnY, exitX, exitY }
+  // ── Place stairs as wall features ────────────────────────────────────────
+
+  interface StairResult {
+    wallX: number; wallY: number
+    floorX: number; floorY: number
+    facing: Direction
+  }
+
+  function findWallSlot(
+    cx: number, cy: number, hs: number,
+    cells: Cell[][], cellW: number, cellH: number
+  ): StairResult | null {
+    const candidates: StairResult[] = [
+      { wallX: cx,      wallY: cy-hs-1, floorX: cx,      floorY: cy-hs, facing: 'north' },
+      { wallX: cx+hs+1, wallY: cy,      floorX: cx+hs,   floorY: cy,    facing: 'east'  },
+      { wallX: cx,      wallY: cy+hs+1, floorX: cx,      floorY: cy+hs, facing: 'south' },
+      { wallX: cx-hs-1, wallY: cy,      floorX: cx-hs,   floorY: cy,    facing: 'west'  },
+    ]
+    for (const c of candidates) {
+      if (
+        c.wallX >= 0 && c.wallX < cellW && c.wallY >= 0 && c.wallY < cellH &&
+        cells[c.wallY][c.wallX].type === 'wall' &&
+        c.floorX >= 0 && c.floorX < cellW && c.floorY >= 0 && c.floorY < cellH &&
+        cells[c.floorY][c.floorX].type === 'floor'
+      ) return c
+    }
+    return null
+  }
+
+  const spCx = toCx(sp.rx), spCy = toCy(sp.ry)
+  const epCx = toCx(ep.rx), epCy = toCy(ep.ry)
+  const HS = 1  // halfSize for start/end rooms
+
+  const entrySlot = findWallSlot(spCx, spCy, HS, cells, cellW, cellH)
+  const exitSlot  = findWallSlot(epCx, epCy, HS, cells, cellW, cellH)
+
+  if (entrySlot) cells[entrySlot.wallY][entrySlot.wallX] = { type: 'wall', wallOverride: 'stairs_up' }
+  if (exitSlot)  cells[exitSlot.wallY][exitSlot.wallX]   = { type: 'wall', wallOverride: 'stairs_down' }
+
+  return {
+    cells, width: cellW, height: cellH,
+    spawnX:       entrySlot?.floorX ?? spCx,
+    spawnY:       entrySlot?.floorY ?? spCy,
+    spawnFacing:  entrySlot?.facing ?? 'north',
+    exitX:        exitSlot?.wallX ?? epCx,
+    exitY:        exitSlot?.wallY ?? epCy,
+    returnX:      exitSlot?.floorX ?? epCx,
+    returnY:      exitSlot?.floorY ?? epCy,
+    returnFacing: exitSlot?.facing ?? 'north',
+    entryWallX:   entrySlot?.wallX ?? spCx,
+    entryWallY:   entrySlot?.wallY ?? spCy,
+  }
 }
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
-export function generateFloor(id: string, theme: FloorTheme, seed: number): FloorMap {
+export function generateFloor(id: string, theme: FloorTheme, seed: number, levelIndex: number): FloorMap {
   const r     = makeRng(seed)
   const graph = buildGraph(r)
   const pos   = layoutGraph(graph, r)
   const rast  = rasterize(graph, pos, r)
 
-  return {
+  const floor: FloorMap = {
     id,
     theme,
     width:        rast.width,
@@ -349,8 +406,20 @@ export function generateFloor(id: string, theme: FloorTheme, seed: number): Floo
     cells:        rast.cells,
     spawnX:       rast.spawnX,
     spawnY:       rast.spawnY,
-    spawnFacing:  'north',
+    spawnFacing:  rast.spawnFacing,
     exitX:        rast.exitX,
     exitY:        rast.exitY,
+    returnX:      rast.returnX,
+    returnY:      rast.returnY,
+    returnFacing: rast.returnFacing,
+    entryWallX:   rast.entryWallX,
+    entryWallY:   rast.entryWallY,
   }
+
+  // Override entry wall for first level: stairs_up → town_gate
+  if (levelIndex === 0) {
+    floor.cells[floor.entryWallY][floor.entryWallX] = { type: 'wall', wallOverride: 'town_gate' }
+  }
+
+  return floor
 }

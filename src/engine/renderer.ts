@@ -200,9 +200,12 @@ function renderToBuffer(
 
     const darkFactor = Math.min(1, dist / SHADE_END + (side === 1 ? 0.10 : 0))
 
-    // Door tint: warm amber overlay
-    const cellOver = getCell(floorId, mapX, mapY).wallOverride
-    const isDoor   = cellOver === 'door_closed' || cellOver === 'door_locked'
+    // Wall override tints
+    const cellOver    = getCell(floorId, mapX, mapY).wallOverride
+    const isDoor      = cellOver === 'door_closed' || cellOver === 'door_locked'
+    const isStairsDown = cellOver === 'stairs_down'
+    const isStairsUp   = cellOver === 'stairs_up'
+    const isTownGate   = cellOver === 'town_gate'
 
     const tex    = getWallPixels(mapX, mapY, theme)
     const tw     = tex ? tex.w : 1
@@ -226,6 +229,27 @@ function renderToBuffer(
         const r8 = Math.min(255, Math.floor(( px32        & 0xFF) * 1.1))
         const g8 =                Math.floor(((px32 >>  8) & 0xFF) * 0.65)
         const b8 =                Math.floor(((px32 >> 16) & 0xFF) * 0.35)
+        px32 = 0xFF000000 | r8 | (g8 << 8) | (b8 << 16)
+      }
+      if (isStairsDown) {
+        // Green-blue tint: descending stairs
+        const r8 = Math.floor((px32        & 0xFF) * 0.5)
+        const g8 = Math.min(255, Math.floor(((px32 >>  8) & 0xFF) * 1.3))
+        const b8 = Math.min(255, Math.floor(((px32 >> 16) & 0xFF) * 1.6))
+        px32 = 0xFF000000 | r8 | (g8 << 8) | (b8 << 16)
+      }
+      if (isStairsUp) {
+        // Warm blue tint: ascending stairs
+        const r8 = Math.floor((px32        & 0xFF) * 0.7)
+        const g8 = Math.floor(((px32 >>  8) & 0xFF) * 0.9)
+        const b8 = Math.min(255, Math.floor(((px32 >> 16) & 0xFF) * 1.8))
+        px32 = 0xFF000000 | r8 | (g8 << 8) | (b8 << 16)
+      }
+      if (isTownGate) {
+        // Gold/amber tint: town gate (warm, brighter than doors)
+        const r8 = Math.min(255, Math.floor((px32        & 0xFF) * 1.6))
+        const g8 = Math.min(255, Math.floor(((px32 >>  8) & 0xFF) * 1.2))
+        const b8 = Math.floor(((px32 >> 16) & 0xFF) * 0.3)
         px32 = 0xFF000000 | r8 | (g8 << 8) | (b8 << 16)
       }
 
