@@ -100,6 +100,7 @@ function makeGameState(runOverrides: Partial<RunState> = {}): GameState {
     shownLevelEntries: new Set(),
     gameTick: 0,
     enemyMoveMs: 0,
+    lastActionWasTurn: false,
   }
 }
 

@@ -1,11 +1,20 @@
 import { getCtx } from '../engine/canvas'
 import { GameState } from '../game/gameState'
 import { CANVAS_W, CANVAS_H } from '../constants'
+import { saveGame, exportSave, importSave, hasSave } from '../persistence/saveSystem'
 
-const MENU_ITEMS = [
+const STATIC_ITEMS = [
   { label: 'Enter the Dungeon', action: 'dungeon' },
   { label: 'Rest  (restore HP)', action: 'rest' },
+  { label: 'Save Game',          action: 'save' },
+  { label: 'Export Save File',   action: 'export' },
+  { label: 'Import Save File',   action: 'import' },
 ]
+
+// Returns menu items with Save highlighted if a save exists
+function menuItems() {
+  return STATIC_ITEMS
+}
 
 export function renderTown(state: GameState): void {
   const ctx = getCtx()
@@ -35,21 +44,29 @@ export function renderTown(state: GameState): void {
   ctx.font = '11px monospace'
   ctx.fillText('You have returned from the depths.', CANVAS_W / 2, 64)
 
+  // Save indicator
+  if (hasSave()) {
+    ctx.fillStyle = '#3a5a30'
+    ctx.font = '10px monospace'
+    ctx.fillText('◆ Save exists', CANVAS_W / 2, 80)
+  }
+
   // Menu
-  const menuY = CANVAS_H / 2 - 20
-  MENU_ITEMS.forEach((item, i) => {
-    const y = menuY + i * 32
+  const items  = menuItems()
+  const menuY  = CANVAS_H / 2 - 40
+  items.forEach((item, i) => {
+    const y          = menuY + i * 28
     const isSelected = state.townMenuIndex === i
 
     if (isSelected) {
       ctx.fillStyle = 'rgba(200,169,106,0.12)'
-      ctx.fillRect(CANVAS_W / 2 - 140, y - 14, 280, 24)
+      ctx.fillRect(CANVAS_W / 2 - 140, y - 14, 280, 22)
       ctx.fillStyle = '#e8c97a'
     } else {
       ctx.fillStyle = '#5a4a30'
     }
 
-    ctx.font = isSelected ? 'bold 14px monospace' : '14px monospace'
+    ctx.font = isSelected ? 'bold 13px monospace' : '13px monospace'
     ctx.fillText((isSelected ? '▶ ' : '  ') + item.label, CANVAS_W / 2, y)
   })
 
@@ -60,9 +77,29 @@ export function renderTown(state: GameState): void {
 }
 
 export function townMenuItemCount(): number {
-  return MENU_ITEMS.length
+  return menuItems().length
 }
 
 export function getTownMenuAction(index: number): string {
-  return MENU_ITEMS[index]?.action ?? ''
+  return menuItems()[index]?.action ?? ''
+}
+
+/** Handle save/export/import actions that require async or side effects outside the main loop. */
+export async function handleTownSaveAction(
+  action: string,
+  state: GameState,
+): Promise<boolean> {
+  if (action === 'save') {
+    saveGame(state)
+    return true
+  }
+  if (action === 'export') {
+    exportSave(state)
+    return true
+  }
+  if (action === 'import') {
+    const ok = await importSave(state)
+    return ok
+  }
+  return false
 }

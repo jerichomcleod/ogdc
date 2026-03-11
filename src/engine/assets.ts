@@ -58,11 +58,6 @@ const ITEM_SPRITE_PATHS: Record<string, string> = {
   potion_lg: `${BASE}items/potion_large.png`,
 }
 
-const WALL_PATHS_BY_THEME: Record<string, string[]> = {
-  stone:    STONE_PATH,
-  catacomb: CATACOMB_PATH,
-  machine:  MACHINE_PATH,
-}
 
 const cache      = new Map<string, HTMLImageElement>()
 const pixelCache = new Map<string, TexPixels>()
@@ -193,11 +188,24 @@ export function getCeilPixels(floorId: string): TexPixels | undefined {
   return img ? pixelCache.get(img.src) : undefined
 }
 
-/** Theme-aware wall texture for a given cell coordinate. */
+/** Theme-aware wall texture for a given cell coordinate.
+ *  Catacomb: 60% stone, 40% catacomb.
+ *  Machine:  60% stone, 38% machine, 2% catacomb.
+ *  Stone:    100% stone.
+ */
 export function getWallPixels(cx: number, cy: number, theme: string): TexPixels | undefined {
-  const paths = WALL_PATHS_BY_THEME[theme] ?? STONE_PATH
-  const path  = paths[cellTexIndex(cx, cy, paths.length)]
-  const img   = cache.get(path)
+  let paths: string[]
+  if (theme === 'catacomb') {
+    const pick = ((cx * 1637 + cy * 3119 + cx * cy * 97) >>> 0) % 100
+    paths = pick < 60 ? STONE_PATH : CATACOMB_PATH
+  } else if (theme === 'machine') {
+    const pick = ((cx * 1637 + cy * 3119 + cx * cy * 97) >>> 0) % 100
+    paths = pick < 60 ? STONE_PATH : pick < 98 ? MACHINE_PATH : CATACOMB_PATH
+  } else {
+    paths = STONE_PATH
+  }
+  const path = paths[cellTexIndex(cx, cy, paths.length)]
+  const img  = cache.get(path)
   return img ? pixelCache.get(img.src) : undefined
 }
 

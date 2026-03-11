@@ -48,6 +48,7 @@ export interface GameState {
   shownLevelEntries:  Set<string>  // floors whose entry message has been shown this run
   gameTick:           number       // increments each time the player acts; drives sprite frame selection
   enemyMoveMs:        number       // performance.now() when last enemy turn was processed; drives move animation
+  lastActionWasTurn:  boolean      // true when last player action was a turn; blocks enemy attacks that tick
 }
 
 export function pushCombatLog(run: RunState, msg: string): void {
@@ -100,6 +101,7 @@ export function makeInitialState(): GameState {
     shownLevelEntries:  new Set(),
     gameTick:           0,
     enemyMoveMs:        0,
+    lastActionWasTurn:  false,
   }
 }
 

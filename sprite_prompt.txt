@@ -1,0 +1,51 @@
+Create a 3×3 pixel-art sprite sheet for a retro dark-fantasy dungeon crawler enemy called Revenant.
+
+Layout:
+
+- 3 rows = enemy variants. Entities on the same row are the same entity across the 3 columns and should look the same, just in different poses. Each separate row is a different entity and looks different. 
+- 3 columns = poses
+    - Column 1: Idle (front-facing)
+    - Column 2: Attack (front-facing)
+    - Column 3: Dead
+
+Critical orientation rules:
+
+- Idle and attack sprites must face perfectly straight forward.
+- The enemy’s shoulders must be symmetrical.
+- The head must point directly at the viewer.
+- No side view. No 3/4 view. No turned torso. No angled stance.
+- The sprite must look like a first-person game target standing directly in front of the player.
+
+Attack animation:
+- Wielding a rusty sword and buckler
+- Weapon swings across the body, creating a motion arc, but the body remains front-facing.
+- The weapon must not be pointed toward the viewer.
+- No motion blur
+- Arc allowed, but no turning of the body.
+
+Dead pose:
+- May fall sideways, forward, or backward.
+- Orientation unrestricted.
+
+Enemy design:
+- Ivory color skeletal warrior
+- Muted palette fitting a dungeon crawler with a serious tone
+- Wearing tattered leather armor
+
+Style:
+- Retro pixel-art game sprite
+- Dark adult dungeon crawler tone
+- Clean readable silhouette
+- Rendering constraints:
+- Transparent background
+- No scenery, floor, border, or backdrop
+- Each sprite clearly separated
+- Consistent scale
+- PNG sprite-sheet style
+
+Negative constraints:
+- No side-facing sprites
+- No angled attack poses
+- No glowing eyes
+- No bright magical effects
+- No background

@@ -293,12 +293,21 @@ function rasterize(graph: DunGraph, positions: Map<number, RoomPos>, r: () => nu
         setFloor(ox + dx, oy + dy)
   }
 
-  // L-shaped corridor: horizontal first, then vertical
+  // L-shaped corridor: randomly choose H-then-V or V-then-H for each edge.
+  // This alone creates visual variety — paths meander depending on which way
+  // the bend goes. No extra waypoints needed (they cause door constraint issues).
   function carveCorridor(ax: number, ay: number, bx: number, by: number): void {
     const x0 = Math.min(ax, bx), x1 = Math.max(ax, bx)
     const y0 = Math.min(ay, by), y1 = Math.max(ay, by)
-    for (let x = x0; x <= x1; x++) setFloor(x, ay)
-    for (let y = y0; y <= y1; y++) setFloor(bx, y)
+    if (r() < 0.5) {
+      // Horizontal first, then vertical
+      for (let x = x0; x <= x1; x++) setFloor(x, ay)
+      for (let y = y0; y <= y1; y++) setFloor(bx, y)
+    } else {
+      // Vertical first, then horizontal
+      for (let y = y0; y <= y1; y++) setFloor(ax, y)
+      for (let x = x0; x <= x1; x++) setFloor(x, by)
+    }
   }
 
   // Carve rooms

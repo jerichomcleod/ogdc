@@ -175,20 +175,24 @@ Fixed regressions (do not reintroduce):
 
 ---
 
+## New Bugs
+
+- Paths are just straight lines. They should meander, making random turns occasionally. 
+- Players should be able to react to monsters. If a player's most recent move was to turn, monsters do not attack them. 
+- catacomb and machinery walls still be 60% stone walls, and only 40% the new type. Machinery areas can also use a catacomb wall with 2% probability. 
+
+---
+
 ## Enhancements (Future / Nice-to-Have)
 
-- **Seeded daily challenge mode** — fixed seed per date, leaderboard-friendly
-- **Second character archetype** — different starting stats/ability (e.g. Seeker: fast, low HP)
 - **Maze pressure escalation** — dungeon becomes more hostile the longer you stay on a floor
-- **Light / lantern mechanic** — exploration mode (wide reveal) vs revelation mode (finds secrets, drains energy)
 - **Trap types** — spike corridors, pressure plates, dart launchers, cursed chests
 - **Hidden passages** — walls that look solid but are passable after discovery
 - **Procedural audio expansion** — Web Audio API synth for full ambient soundscape
 - **Animated torch / light flicker** — subtle intensity variation on wall brightness
 - **Particle effects** — hit sparks, death dissolve
-- **Multiple save slots** — IndexedDB with slot selection on title screen
-- **Narrative branching** — mid-game discoveries change hub dialogue and final choice options
-- **Expanded floor count** — beyond 15 levels; theme 4+ (e.g. Hollow Choir, Deep Machine)
+
+
 
 ---
 

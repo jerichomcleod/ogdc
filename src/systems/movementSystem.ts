@@ -16,14 +16,16 @@ export function processMovement(state: GameState): void {
   // ── Turning ────────────────────────────────────────────────────────────────
   if (consumeAction('TURN_LEFT')) {
     const prev = run.facing
-    run.facing      = turnLeft(run.facing)
-    run.playerActed = true
+    run.facing              = turnLeft(run.facing)
+    run.playerActed         = true
+    state.lastActionWasTurn = true
     run.anim        = { type: 'turn_left', prevFacing: prev, startMs: performance.now(), durationMs: TURN_MS }
 
   } else if (consumeAction('TURN_RIGHT')) {
     const prev = run.facing
-    run.facing      = turnRight(run.facing)
-    run.playerActed = true
+    run.facing              = turnRight(run.facing)
+    run.playerActed         = true
+    state.lastActionWasTurn = true
     run.anim        = { type: 'turn_right', prevFacing: prev, startMs: performance.now(), durationMs: TURN_MS }
 
   // ── Forward / back movement ────────────────────────────────────────────────
@@ -31,12 +33,14 @@ export function processMovement(state: GameState): void {
     const { dx, dy } = stepOffset(run.facing)
     const nx = run.position.x + dx, ny = run.position.y + dy
     if (!isPassable(run.floorId, nx, ny) && tryStairTransit(state, nx, ny)) {
-      run.playerActed = true
+      run.playerActed         = true
+      state.lastActionWasTurn = false
     } else if (isPassable(run.floorId, nx, ny) && !run.enemies.some(e => e.x === nx && e.y === ny)) {
       const prev      = run.facing
       run.position.x  = nx
       run.position.y  = ny
-      run.playerActed = true
+      run.playerActed         = true
+      state.lastActionWasTurn = false
       revealAround(state)
       tryPickupItem(run, nx, ny)
       checkDeadEnd(state)
@@ -50,7 +54,8 @@ export function processMovement(state: GameState): void {
       const prev      = run.facing
       run.position.x  = nx
       run.position.y  = ny
-      run.playerActed = true
+      run.playerActed         = true
+      state.lastActionWasTurn = false
       revealAround(state)
       tryPickupItem(run, nx, ny)
       checkDeadEnd(state)
@@ -60,18 +65,21 @@ export function processMovement(state: GameState): void {
   // ── Attack ─────────────────────────────────────────────────────────────────
   } else if (consumeAction('ATTACK')) {
     attackFacing(state)
-    run.playerActed = true
+    run.playerActed         = true
+    state.lastActionWasTurn = false
 
   // ── Use item ───────────────────────────────────────────────────────────────
   } else if (consumeAction('USE_ITEM')) {
     if (useItem(run)) {
-      run.playerActed = true
+      run.playerActed         = true
+      state.lastActionWasTurn = false
     }
 
   // ── Interact ───────────────────────────────────────────────────────────────
   } else if (consumeAction('INTERACT')) {
     if (interactFacing(state)) {
-      run.playerActed = true
+      run.playerActed         = true
+      state.lastActionWasTurn = false
     }
   }
 }

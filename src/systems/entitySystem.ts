@@ -152,10 +152,12 @@ export function processEnemyTurns(state: GameState): void {
 
     const dist = Math.abs(enemy.x - px) + Math.abs(enemy.y - py)
 
-    // Attack if adjacent to player
+    // Attack if adjacent to player — but not if the player just turned (they get a reaction window)
     if (dist === 1) {
-      enemy.isAttacking = true
-      dealDamageToPlayer(state, enemy.defKey, def.attack)
+      if (!state.lastActionWasTurn) {
+        enemy.isAttacking = true
+        dealDamageToPlayer(state, enemy.defKey, def.attack)
+      }
       continue
     }
 

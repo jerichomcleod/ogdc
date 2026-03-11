@@ -6,7 +6,8 @@ import { processEnemyTurns, generateEntities } from '../systems/entitySystem'
 import { renderDungeon } from '../engine/renderer'
 import { renderMinimap } from '../ui/minimap'
 import { renderLevelEntry, renderGameOver, renderCombatLog, renderHpOverlay, renderDeadEnd } from '../ui/overlays'
-import { renderTown, townMenuItemCount, getTownMenuAction } from '../ui/town'
+import { renderTown, townMenuItemCount, getTownMenuAction, handleTownSaveAction } from '../ui/town'
+import { loadGame } from '../persistence/saveSystem'
 
 export function startLoop(state: GameState): void {
   // Populate the first floor's entities
@@ -57,8 +58,14 @@ function update(state: GameState): void {
           const fresh = makeInitialState()
           Object.assign(state, fresh)
           spawnEntitiesForFloor(state)
+        } else if (state.gameOverMenuIndex === 1) {
+          // Load Game
+          flushInput()
+          const loaded = loadGame(state)
+          if (loaded) {
+            if (!state.run.entitiesSpawned) spawnEntitiesForFloor(state)
+          }
         }
-        // Load Game: not yet implemented — do nothing
       }
       break
     }
@@ -84,6 +91,15 @@ function updateTown(state: GameState): void {
     } else if (action === 'rest') {
       state.run.hp = state.run.maxHp
       state.run.combatLog = ['You feel restored.']
+    } else if (action === 'save' || action === 'export' || action === 'import') {
+      handleTownSaveAction(action, state).then(ok => {
+        if (action === 'import' && ok) {
+          if (!state.run.entitiesSpawned) spawnEntitiesForFloor(state)
+        }
+        if (action === 'save' && ok) {
+          state.run.combatLog = ['Game saved.']
+        }
+      })
     }
   }
 }
