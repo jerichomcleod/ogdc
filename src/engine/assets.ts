@@ -2,36 +2,60 @@
 // BASE_URL is '/' in dev and '/ogdc/' in production.
 const BASE = import.meta.env.BASE_URL
 
-const STONE_PATH    = Array.from({ length: 7  }, (_, i) => `${BASE}stone_${i + 1}.png`)
-const CATACOMB_PATH = Array.from({ length: 10 }, (_, i) => `${BASE}catacombs_${i + 1}.png`)
-const MACHINE_PATH  = Array.from({ length: 12 }, (_, i) => `${BASE}machinery_${i + 1}.png`)
-const FLOOR_PATHS   = Array.from({ length: 8  }, (_, i) => `${BASE}floor_${i + 1}.png`)
-const CEIL_PATHS    = Array.from({ length: 8  }, (_, i) => `${BASE}ceiling_${i + 1}.png`)
+// ── Wall textures ─────────────────────────────────────────────────────────────
+const STONE_PATH    = Array.from({ length: 7  }, (_, i) => `${BASE}walls/stone_${i + 1}.png`)
+const CATACOMB_PATH = Array.from({ length: 10 }, (_, i) => `${BASE}walls/catacombs_${i + 1}.png`)
+const MACHINE_PATH  = Array.from({ length: 12 }, (_, i) => `${BASE}walls/machinery_${i + 1}.png`)
 
-const DOOR_CLOSED_PATHS = ['door_closed_1.png','door_closed_2.png','door_closed_3.png'].map(f => `${BASE}${f}`)
-const DOOR_OPEN_PATHS   = ['door_opened_1.png','door_opened_2.png','door_open_3.png'].map(f => `${BASE}${f}`)
-const STAIR_DOWN_PATH   = `${BASE}stair_down.png`
-const STAIR_UP_PATH     = `${BASE}stair_up.png`
+// ── Floor / ceiling textures ──────────────────────────────────────────────────
+const FLOOR_PATHS = Array.from({ length: 8 }, (_, i) => `${BASE}floors/floor_${i + 1}.png`)
+const CEIL_PATHS  = Array.from({ length: 8 }, (_, i) => `${BASE}floors/ceiling_${i + 1}.png`)
+
+// ── Door / world textures ─────────────────────────────────────────────────────
+const DOOR_CLOSED_PATHS = ['door_closed_1.png','door_closed_2.png','door_closed_3.png']
+  .map(f => `${BASE}doors/${f}`)
+const DOOR_OPEN_PATHS   = ['door_opened_1.png','door_opened_2.png','door_open_3.png']
+  .map(f => `${BASE}doors/${f}`)
+const STAIR_DOWN_PATH   = `${BASE}world/stair_down.png`
+const STAIR_UP_PATH     = `${BASE}world/stair_up.png`
 
 // ── Enemy sprite paths ────────────────────────────────────────────────────────
 // Organised as: ENEMY_SPRITE_PATHS[defKey][phase][frameIdx]
+// Phase keys are always 'stand' | 'attack' | 'dead' in code regardless of
+// filename convention (some files use 'standing_', mapped here to 'stand').
+const E = `${BASE}enemies/`
 const ENEMY_SPRITE_PATHS: Record<string, Record<string, string[]>> = {
   crawler: {
-    stand:  [1,2,3].map(n => `${BASE}enemy_crawler_stand_${n}.png`),
-    attack: [1,2,3].map(n => `${BASE}enemy_crawler_attack_${n}.png`),
-    dead:   [1,2].map(n => `${BASE}enemy_crawler_dead_${n}.png`),
+    stand:  [1,2,3].map(n => `${E}enemy_crawler_stand_${n}.png`),
+    attack: [1,2,3].map(n => `${E}enemy_crawler_attack_${n}.png`),
+    dead:   [1,2].map(n =>   `${E}enemy_crawler_dead_${n}.png`),
   },
   shade: {
-    stand:  [1,2].map(n => `${BASE}enemy_shade_stand_${n}.png`),
-    attack: [1,2].map(n => `${BASE}enemy_shade_attack_${n}.png`),
-    dead:   [1,2].map(n => `${BASE}enemy_shade_dead_${n}.png`),
+    stand:  [1,2].map(n => `${E}enemy_shade_stand_${n}.png`),
+    attack: [1,2].map(n => `${E}enemy_shade_attack_${n}.png`),
+    dead:   [1,2].map(n => `${E}enemy_shade_dead_${n}.png`),
+  },
+  sentinel: {
+    stand:  [1,2,3].map(n => `${E}enemy_sentinel_standing_${n}.png`),
+    attack: [1,2].map(n =>   `${E}enemy_sentinel_attack_${n}.png`),
+    dead:   [1,2].map(n =>   `${E}enemy_sentinel_dead_${n}.png`),
+  },
+  revenant: {
+    stand:  [1,2,3].map(n => `${E}enemy_revenant_stand_${n}.png`),
+    attack: [1,2,3].map(n => `${E}enemy_revenant_attack_${n}.png`),
+    dead:   [1,2,3].map(n => `${E}enemy_revenant_dead_${n}.png`),
+  },
+  boneguard: {
+    stand:  [1,2,3].map(n => `${E}enemy_boneguard_standing_${n}.png`),
+    attack: [1,2,3].map(n => `${E}enemy_boneguard_attack_${n}.png`),
+    dead:   [1,2,3].map(n => `${E}enemy_boneguard_dead_${n}.png`),
   },
 }
 
 // ── Item sprite paths ─────────────────────────────────────────────────────────
 const ITEM_SPRITE_PATHS: Record<string, string> = {
-  potion_sm: `${BASE}potion_small.png`,
-  potion_lg: `${BASE}potion_large.png`,
+  potion_sm: `${BASE}items/potion_small.png`,
+  potion_lg: `${BASE}items/potion_large.png`,
 }
 
 const WALL_PATHS_BY_THEME: Record<string, string[]> = {
@@ -118,9 +142,9 @@ export async function preloadAssets(): Promise<void> {
   }
 
   const [deadEndCsv, gameOverCsv, lvlDescCsv] = await Promise.all([
-    fetch(`${BASE}deadend.csv`).then(r => r.text()),
-    fetch(`${BASE}gameover.csv`).then(r => r.text()),
-    fetch(`${BASE}lvldesc.csv`).then(r => r.text()),
+    fetch(`${BASE}data/deadend.csv`).then(r => r.text()),
+    fetch(`${BASE}data/gameover.csv`).then(r => r.text()),
+    fetch(`${BASE}data/lvldesc.csv`).then(r => r.text()),
   ])
 
   for (const row of parseCSV(deadEndCsv)) {
@@ -195,7 +219,7 @@ export function getStairUpPixels(): TexPixels | undefined {
 
 /**
  * Get pixel data for an enemy sprite.
- * @param defKey   Enemy definition key (e.g. 'crawler', 'shade')
+ * @param defKey   Enemy definition key (e.g. 'crawler', 'sentinel')
  * @param phase    'stand' | 'attack' | 'dead'
  * @param frameIdx 0-based frame index within that phase
  */
