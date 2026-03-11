@@ -60,11 +60,16 @@ interface Hit {
   mapY:  number
 }
 
+interface CastResult {
+  hit:      Hit | null
+  doorHits: Hit[]   // open-door cells the ray passed through, back-to-front order
+}
+
 function castRay(
   posX: number, posY: number,
   rdx:  number, rdy:  number,
   floorId: string,
-): Hit | null {
+): CastResult {
   let mx = Math.floor(posX)
   let my = Math.floor(posY)
 
@@ -76,28 +81,35 @@ function castRay(
   let sdy   = rdy < 0 ? (posY - my) * ddy : (my + 1 - posY) * ddy
 
   let side: 0 | 1 = 0
+  const doorHits: Hit[] = []
+
+  function makeHit(dist: number): Hit {
+    let wallX = side === 0 ? posY + dist * rdy : posX + dist * rdx
+    wallX -= Math.floor(wallX)
+    if (side === 0 && rdx > 0) wallX = 1 - wallX
+    if (side === 1 && rdy < 0) wallX = 1 - wallX
+    return { dist, wallX, side, mapX: mx, mapY: my }
+  }
 
   for (let i = 0; i < MAX_RAY; i++) {
     if (sdx < sdy) { sdx += ddx; mx += sx; side = 0 }
     else           { sdy += ddy; my += sy; side = 1 }
 
-    if (getCell(floorId, mx, my).type !== 'floor') {
-      const dist = side === 0 ? sdx - ddx : sdy - ddy
-      if (dist < 0.001) return null
+    const cell = getCell(floorId, mx, my)
+    if (cell.type === 'floor') continue
 
-      // wallX: fractional hit position on the face, oriented consistently
-      // so texture reads left-to-right regardless of which face was struck.
-      let wallX = side === 0
-        ? posY + dist * rdy
-        : posX + dist * rdx
-      wallX -= Math.floor(wallX)
-      if (side === 0 && rdx > 0) wallX = 1 - wallX
-      if (side === 1 && rdy < 0) wallX = 1 - wallX
+    const dist = side === 0 ? sdx - ddx : sdy - ddy
+    if (dist < 0.001) return { hit: null, doorHits }
 
-      return { dist, wallX, side, mapX: mx, mapY: my }
+    if (cell.wallOverride === 'door_open') {
+      // Record for rendering but continue the ray through
+      doorHits.push(makeHit(dist))
+      continue
     }
+
+    return { hit: makeHit(dist), doorHits }
   }
-  return null
+  return { hit: null, doorHits }
 }
 
 // ── Pixel helpers ────────────────────────────────────────────────────────────
@@ -186,9 +198,10 @@ function renderToBuffer(
 
   for (let x = 0; x < CANVAS_W; x++) {
     const camX = 2 * x / CANVAS_W - 1
-    const hit  = castRay(posX, posY, dx + px * camX, dy + py * camX, floorId)
-    if (!hit) continue
+    const { hit, doorHits } = castRay(posX, posY, dx + px * camX, dy + py * camX, floorId)
 
+    // ── Solid wall ───────────────────────────────────────────────────────────
+    if (hit) {
     const { dist, wallX, side, mapX, mapY } = hit
     _zBuf[x] = dist
 
@@ -203,21 +216,21 @@ function renderToBuffer(
     // Wall override — pick texture based on cell override
     const cellOver     = getCell(floorId, mapX, mapY).wallOverride
     const isDoorClosed = cellOver === 'door_closed' || cellOver === 'door_locked'
-    const isDoorOpen   = cellOver === 'door_open'
     const isStairsDown = cellOver === 'stairs_down'
     const isStairsUp   = cellOver === 'stairs_up'
     const isTownGate   = cellOver === 'town_gate'
 
     let tex: ReturnType<typeof getWallPixels>
     if (isDoorClosed)      tex = getDoorClosedPixels(mapX, mapY)
-    else if (isDoorOpen)   tex = getDoorOpenPixels(mapX, mapY)
     else if (isStairsDown) tex = getStairDownPixels()
     else if (isStairsUp)   tex = getStairUpPixels()
     else                   tex = getWallPixels(mapX, mapY, theme)
 
-    const tw     = tex ? tex.w : 1
-    const th     = tex ? tex.h : 1
-    const texCol = tex ? Math.max(0, Math.min(tw - 1, Math.floor(wallX * tw))) : 0
+    const tw       = tex ? tex.w : 1
+    const th       = tex ? tex.h : 1
+    const texCol   = tex ? Math.max(0, Math.min(tw - 1, Math.floor(wallX * tw))) : 0
+    // Doors and stairs use transparent PNGs — skip fully-transparent pixels
+    const hasAlpha = isDoorClosed || isStairsDown || isStairsUp
 
     for (let y = pixTop; y <= pixBottom; y++) {
       let px32: number
@@ -225,7 +238,10 @@ function renderToBuffer(
       if (tex) {
         const stripFrac = (y - wallTop) / lineH
         const texRow    = Math.max(0, Math.min(th - 1, Math.floor(stripFrac * th)))
-        px32 = shade(tex.pixels[texRow * tw + texCol], darkFactor)
+        const raw       = tex.pixels[texRow * tw + texCol]
+        // Skip transparent pixels so floor/ceiling behind shows through
+        if (hasAlpha && (raw >>> 24) < 128) continue
+        px32 = shade(raw, darkFactor)
       } else {
         const v = Math.floor(0x6B * (1 - darkFactor))
         px32 = rgba(v, Math.floor(v * 0.85), Math.floor(v * 0.62))
@@ -239,6 +255,35 @@ function renderToBuffer(
       }
 
       out[y * CANVAS_W + x] = px32
+    }
+    } // end if (hit)
+
+    // ── Open doors — alpha-blended over whatever the ray found behind ─────────
+    for (const dHit of doorHits) {
+      if (dHit.dist >= _zBuf[x]) continue  // behind a solid wall
+      const tex = getDoorOpenPixels(dHit.mapX, dHit.mapY)
+      if (!tex) continue
+
+      const df      = Math.min(1, dHit.dist / SHADE_END + (dHit.side === 1 ? 0.10 : 0))
+      const lineH   = DUNGEON_H / dHit.dist
+      const wallTop = HORIZON_Y - lineH / 2
+      const pixTop  = Math.max(0,          Math.ceil(wallTop))
+      const pixBot  = Math.min(DUNGEON_H - 1, Math.floor(wallTop + lineH))
+      const texCol  = Math.max(0, Math.min(tex.w - 1, Math.floor(dHit.wallX * tex.w)))
+
+      for (let y = pixTop; y <= pixBot; y++) {
+        const texRow = Math.max(0, Math.min(tex.h - 1, Math.floor((y - wallTop) / lineH * tex.h)))
+        const raw    = tex.pixels[texRow * tex.w + texCol]
+        const alpha  = (raw >>> 24) & 0xFF
+        if (alpha < 16) continue
+        const a   = alpha / 255
+        const src = shade(raw, df)
+        const dst = out[y * CANVAS_W + x]
+        const r8  = Math.floor(((src       ) & 0xFF) * a + ((dst       ) & 0xFF) * (1 - a))
+        const g8  = Math.floor(((src >>  8) & 0xFF) * a + ((dst >>  8) & 0xFF) * (1 - a))
+        const b8  = Math.floor(((src >> 16) & 0xFF) * a + ((dst >> 16) & 0xFF) * (1 - a))
+        out[y * CANVAS_W + x] = 0xFF000000 | r8 | (g8 << 8) | (b8 << 16)
+      }
     }
   }
 

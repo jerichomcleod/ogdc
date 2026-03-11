@@ -317,20 +317,45 @@ function rasterize(graph: DunGraph, positions: Map<number, RoomPos>, r: () => nu
   const spawnX = toCx(sp.rx), spawnY = toCy(sp.ry)
   const exitX  = toCx(ep.rx), exitY  = toCy(ep.ry)
 
-  // ── Place doors at corridor chokepoints (~25% chance) ────────────────────
-  // A chokepoint is a floor cell with exactly two cardinal floor neighbours
-  // that are directly opposite (N+S or E+W) — a pinch-point in a corridor.
+  // ── Place doors selectively ───────────────────────────────────────────────
+  // A door requires either: a chokepoint corridor cell that borders a larger
+  // room (room cells have multiple floor neighbours), OR an intersection
+  // (3+ floor neighbours). Both cases use low probability.
+  function floorNeighbours(cx: number, cy: number, ex: number, ey: number): number {
+    let n = 0
+    for (const [ddx, ddy] of [[0,-1],[0,1],[1,0],[-1,0]] as [number,number][]) {
+      const nx = cx + ddx, ny = cy + ddy
+      if (nx === ex && ny === ey) continue
+      if (cells[ny]?.[nx]?.type === 'floor') n++
+    }
+    return n
+  }
+
   for (let y = 1; y < cellH - 1; y++) {
     for (let x = 1; x < cellW - 1; x++) {
       if (cells[y][x].type !== 'floor') continue
       if (x === spawnX && y === spawnY) continue
       if (x === exitX  && y === exitY)  continue
-      const n = cells[y - 1][x].type === 'floor'
-      const s = cells[y + 1][x].type === 'floor'
-      const e = cells[y][x + 1].type === 'floor'
-      const w = cells[y][x - 1].type === 'floor'
-      const isChokepoint = (n && s && !e && !w) || (!n && !s && e && w)
-      if (isChokepoint && r() < 0.25) {
+
+      const nf = cells[y - 1][x].type === 'floor'
+      const sf = cells[y + 1][x].type === 'floor'
+      const ef = cells[y][x + 1].type === 'floor'
+      const wf = cells[y][x - 1].type === 'floor'
+      const total = +nf + +sf + +ef + +wf
+
+      const isChokepoint   = (nf && sf && !ef && !wf) || (!nf && !sf && ef && wf)
+      const isIntersection = total >= 3
+
+      if (isChokepoint) {
+        // Only place a door if one of the two corridor neighbours borders a
+        // larger room (i.e. has >1 floor neighbours itself, implying open space).
+        const [a, b] = nf ? [[x, y-1],[x, y+1]] : [[x+1, y],[x-1, y]]
+        const nearRoom = floorNeighbours(a[0], a[1], x, y) > 1
+                      || floorNeighbours(b[0], b[1], x, y) > 1
+        if (nearRoom && r() < 0.18) {
+          cells[y][x] = { type: 'wall', wallOverride: 'door_closed' }
+        }
+      } else if (isIntersection && r() < 0.06) {
         cells[y][x] = { type: 'wall', wallOverride: 'door_closed' }
       }
     }

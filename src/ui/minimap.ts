@@ -79,6 +79,8 @@ export function renderMinimap(state: GameState): void {
         ctx.fillStyle = C_EXIT
       } else if (c.wallOverride === 'door_closed' || c.wallOverride === 'door_locked') {
         ctx.fillStyle = C_DOOR
+      } else if (c.wallOverride === 'door_open') {
+        ctx.fillStyle = C_FLOOR
       } else if (c.type === 'wall') {
         ctx.fillStyle = C_WALL
       } else {
