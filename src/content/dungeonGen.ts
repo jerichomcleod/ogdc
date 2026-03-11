@@ -138,7 +138,7 @@ function buildGraph(r: () => number): DunGraph {
   // Exclude start and end so they keep exactly 1 corridor, guaranteeing free
   // wall faces for stair placement in their rooms.
   const loopCandidates = [...nodes.values()].filter(n => n.role !== 'start' && n.role !== 'end')
-  const loopCount = ri(r, 2, 6)
+  const loopCount = ri(r, 0, 1)   // 0–1 loops: much less grid-like
   for (let l = 0; l < loopCount; l++) {
     for (let attempt = 0; attempt < 30; attempt++) {
       const a = loopCandidates[Math.floor(r() * loopCandidates.length)]
@@ -147,8 +147,8 @@ function buildGraph(r: () => number): DunGraph {
     }
   }
 
-  // ── 5. Dead ends (2–4): short stubs from any node ────────────────────────
-  const deadCount = ri(r, 4, 8)
+  // ── 5. Dead ends: more stubs for an organic branching feel ────────────────
+  const deadCount = ri(r, 6, 10)
   // Also exclude start/end from dead-end anchors to preserve their wall faces
   const nodeSnap  = [...nodes.values()].filter(n => n.role !== 'start' && n.role !== 'end')
   for (let d = 0; d < deadCount; d++) {

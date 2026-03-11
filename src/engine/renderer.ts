@@ -414,7 +414,7 @@ export function renderDungeon(state: GameState): void {
     ...run.items.map(it => ({
       wx: it.x + 0.5, wy: it.y + 0.5,
       color: (getItemDef(it.defKey)?.color ?? 0xFF00FF00),
-      scaleH: 0.5, offY: 0,
+      scaleH: 0.5, offY: 0.30,
       pixels: getItemSpritePixels(it.defKey),
     })),
   ]
@@ -429,16 +429,14 @@ export function renderDungeon(state: GameState): void {
     const t = Math.min(1, (performance.now() - anim.startMs) / anim.durationMs)
 
     if (anim.type === 'forward' || anim.type === 'back') {
-      // For forward steps, slide the camera from the old cell to the new cell.
-      // For back steps we do NOT shift the camera: the old position is 1 cell
-      // closer to any enemy in front, which makes sprites blow up in size.
-      // Keeping the camera at the new position avoids that artifact.
-      if (anim.type === 'forward') {
-        const [fdx, fdy] = dirVec(run.facing)
-        const ease = (1 - t) * (1 - t)
-        posX -= fdx * ease
-        posY -= fdy * ease
-      }
+      // Slide the camera from the old cell to the new cell (ease-out quadratic).
+      // For forward: camera offsets backward from destination → slides forward.
+      // For back: camera offsets forward from destination → slides backward.
+      const [fdx, fdy] = dirVec(run.facing)
+      const ease = (1 - t) * (1 - t)
+      const off  = anim.type === 'forward' ? ease : -ease
+      posX -= fdx * off
+      posY -= fdy * off
 
     } else {
       isTurn = true
