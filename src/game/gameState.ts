@@ -1,9 +1,9 @@
 import { Direction } from '../content/types'
 import { LEVEL_SEQUENCE, LevelId, getFloor, regenerateDungeons } from '../content/floors'
-import { EnemyInstance, ItemInstance, Corpse } from '../content/defs'
+import { EnemyInstance, ItemInstance, Corpse, Equipment } from '../content/defs'
 import { getGameOverText } from '../engine/assets'
 
-export type { EnemyInstance, ItemInstance, Corpse }
+export type { EnemyInstance, ItemInstance, Corpse, Equipment }
 
 export interface CamAnim {
   type:        'forward' | 'back' | 'turn_left' | 'turn_right'
@@ -24,14 +24,16 @@ export interface RunState {
   enemies:      EnemyInstance[]
   corpses:      Corpse[]          // recently killed enemies; cleared when player moves
   items:        ItemInstance[]    // items on the floor
-  inventory:    ItemInstance[]    // items carried by the player
+  inventory:    ItemInstance[]    // items carried by the player (max 20)
+  equipment:    Equipment         // equipped weapon / armor / shield
+  gold:         number            // gold coins collected
   combatLog:    string[]          // last 4 events, newest last
   levelEntryMs: number            // performance.now() when floor was entered
-  playerActed:      boolean           // set true when player takes a turn action
-  deadEndMsg:       string            // current dead-end flavor text (empty = none)
-  deadEndMs:        number | null     // when dead-end message was triggered
-  entitiesSpawned:  boolean          // true after first entity spawn; prevents respawn on kill-all
-  lastHitMs:        number            // performance.now() of last hit taken; drives red flash
+  playerActed:      boolean
+  deadEndMsg:       string
+  deadEndMs:        number | null
+  entitiesSpawned:  boolean
+  lastHitMs:        number
 }
 
 export type GameMode = 'dungeon' | 'game_over' | 'town'
@@ -42,13 +44,17 @@ export interface GameState {
   worldSeed:          number
   levelIndex:         number
   townMenuIndex:      number
-  gameOverMs:         number   // performance.now() when game_over was set
-  gameOverMessage:    string   // death flavor text, picked once
-  gameOverMenuIndex:  number   // 0=New Game, 1=Load Game
-  shownLevelEntries:  Set<string>  // floors whose entry message has been shown this run
-  gameTick:           number       // increments each time the player acts; drives sprite frame selection
-  enemyMoveMs:        number       // performance.now() when last enemy turn was processed; drives move animation
-  lastActionWasTurn:  boolean      // true when last player action was a turn; blocks enemy attacks that tick
+  gameOverMs:         number
+  gameOverMessage:    string
+  gameOverMenuIndex:  number
+  shownLevelEntries:  Set<string>
+  discoveredPortals:  Set<string>  // floor IDs where player has found the portal
+  gameTick:           number
+  enemyMoveMs:        number
+  lastActionWasTurn:  boolean
+  inventoryOpen:      boolean
+  inventorySlot:      number       // 0-19 = carry grid, 20=weapon, 21=armor, 22=shield
+  inventoryFocus:     'grid' | 'equip'
 }
 
 export function pushCombatLog(run: RunState, msg: string): void {
@@ -60,7 +66,13 @@ export function makeRevealedGrid(width: number, height: number): boolean[][] {
   return Array.from({ length: height }, () => Array(width).fill(false))
 }
 
-function makeRunState(floorId: LevelId, hp: number, maxHp: number): RunState {
+function makeRunState(
+  floorId: LevelId,
+  hp: number, maxHp: number,
+  carry: { inventory: ItemInstance[]; equipment: Equipment; gold: number } = {
+    inventory: [], equipment: { weapon: null, armor: null, shield: null }, gold: 0,
+  },
+): RunState {
   const floor = getFloor(floorId)!
   return {
     floorId,
@@ -74,7 +86,9 @@ function makeRunState(floorId: LevelId, hp: number, maxHp: number): RunState {
     enemies:      [],
     corpses:      [],
     items:        [],
-    inventory:    [],
+    inventory:    carry.inventory,
+    equipment:    carry.equipment,
+    gold:         carry.gold,
     combatLog:    [],
     levelEntryMs: performance.now(),
     playerActed:      false,
@@ -83,6 +97,10 @@ function makeRunState(floorId: LevelId, hp: number, maxHp: number): RunState {
     entitiesSpawned:  false,
     lastHitMs:        0,
   }
+}
+
+function extractCarry(run: RunState) {
+  return { inventory: run.inventory, equipment: run.equipment, gold: run.gold }
 }
 
 export function makeInitialState(): GameState {
@@ -99,13 +117,17 @@ export function makeInitialState(): GameState {
     gameOverMessage:    '',
     gameOverMenuIndex:  0,
     shownLevelEntries:  new Set(),
+    discoveredPortals:  new Set(),
     gameTick:           0,
     enemyMoveMs:        0,
     lastActionWasTurn:  false,
+    inventoryOpen:      false,
+    inventorySlot:      0,
+    inventoryFocus:     'grid',
   }
 }
 
-/** Advance to the next level, preserving HP and inventory. After the last level resets the world. */
+/** Advance to the next level, preserving HP and carry. After the last level resets the world. */
 export function advanceLevel(state: GameState): void {
   const next = state.levelIndex + 1
   if (next >= LEVEL_SEQUENCE.length) {
@@ -116,9 +138,8 @@ export function advanceLevel(state: GameState): void {
   } else {
     state.levelIndex = next
   }
-  const { hp, maxHp, inventory } = state.run
-  state.run           = makeRunState(LEVEL_SEQUENCE[state.levelIndex], hp, maxHp)
-  state.run.inventory = inventory
+  const { hp, maxHp } = state.run
+  state.run = makeRunState(LEVEL_SEQUENCE[state.levelIndex], hp, maxHp, extractCarry(state.run))
 }
 
 export function goToTown(state: GameState): void {
@@ -131,10 +152,11 @@ export function goUp(state: GameState): void {
     goToTown(state)
     return
   }
-  const prev = state.levelIndex - 1
+  const prev  = state.levelIndex - 1
   state.levelIndex = prev
-  const { hp, maxHp, inventory } = state.run
+  const carry = extractCarry(state.run)
   const floor = getFloor(LEVEL_SEQUENCE[prev])!
+  const { hp, maxHp } = state.run
   state.run = {
     floorId:      LEVEL_SEQUENCE[prev],
     position:     { x: floor.returnX, y: floor.returnY },
@@ -146,7 +168,9 @@ export function goUp(state: GameState): void {
     enemies:      [],
     corpses:      [],
     items:        [],
-    inventory,
+    inventory:    carry.inventory,
+    equipment:    carry.equipment,
+    gold:         carry.gold,
     combatLog:    [],
     levelEntryMs: performance.now(),
     playerActed:      false,
@@ -159,13 +183,25 @@ export function goUp(state: GameState): void {
 
 /** Return from town back to dungeon level 0. */
 export function returnToDungeon(state: GameState): void {
-  const { hp, maxHp, inventory } = state.run
+  const { hp, maxHp } = state.run
+  const carry = extractCarry(state.run)
   state.mode = 'dungeon'
+  state.run  = makeRunState(LEVEL_SEQUENCE[0], hp, maxHp, carry)
   state.levelIndex = 0
-  const floor = getFloor(LEVEL_SEQUENCE[0])!
+}
+
+/** Jump directly to any level (0-indexed) via a discovered portal. Preserves carry. */
+export function returnToPortal(state: GameState, floorId: string): void {
+  const idx = LEVEL_SEQUENCE.indexOf(floorId as LevelId)
+  if (idx === -1) return
+  const { hp, maxHp } = state.run
+  const carry  = extractCarry(state.run)
+  const floor  = getFloor(floorId as LevelId)!
+  state.levelIndex = idx
+  state.mode = 'dungeon'
   state.run = {
-    floorId:      LEVEL_SEQUENCE[0],
-    position:     { x: floor.spawnX, y: floor.spawnY },
+    floorId,
+    position:     { x: floor.portalX ?? floor.spawnX, y: floor.portalY ?? floor.spawnY },
     facing:       floor.spawnFacing,
     hp, maxHp,
     mapRevealed:  makeRevealedGrid(floor.width, floor.height),
@@ -174,7 +210,9 @@ export function returnToDungeon(state: GameState): void {
     enemies:      [],
     corpses:      [],
     items:        [],
-    inventory,
+    inventory:    carry.inventory,
+    equipment:    carry.equipment,
+    gold:         carry.gold,
     combatLog:    [],
     levelEntryMs: performance.now(),
     playerActed:      false,
@@ -183,6 +221,14 @@ export function returnToDungeon(state: GameState): void {
     entitiesSpawned:  false,
     lastHitMs:        0,
   }
+}
+
+/** Jump directly to any level (0-indexed). Preserves carry. */
+export function goToLevel(state: GameState, index: number): void {
+  state.levelIndex = Math.max(0, Math.min(LEVEL_SEQUENCE.length - 1, index))
+  const { hp, maxHp } = state.run
+  state.run  = makeRunState(LEVEL_SEQUENCE[state.levelIndex], hp, maxHp, extractCarry(state.run))
+  state.mode = 'dungeon'
 }
 
 export function triggerGameOver(state: GameState): void {

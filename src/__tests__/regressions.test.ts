@@ -298,7 +298,7 @@ describe('R13 — enemy attack pose persists until next action, not time-based',
   it('isAttacking stays true across multiple ticks without a new action', () => {
     const enemy: EnemyInstance = {
       id: 1, defKey: 'crawler', x: 2, y: 1, fromX: 2, fromY: 1,
-      hp: 6, maxHp: 6, turnDebt: 0, isAttacking: true,
+      hp: 6, maxHp: 6, turnDebt: 0, isAttacking: true, lastMoveMs: 0,
     }
     expect(enemy.isAttacking).toBe(true)
   })
@@ -306,7 +306,7 @@ describe('R13 — enemy attack pose persists until next action, not time-based',
   it('isAttacking clears when enemy moves', () => {
     const enemy: EnemyInstance = {
       id: 1, defKey: 'crawler', x: 5, y: 1, fromX: 5, fromY: 1,
-      hp: 6, maxHp: 6, turnDebt: 0, isAttacking: true,
+      hp: 6, maxHp: 6, turnDebt: 0, isAttacking: true, lastMoveMs: 0,
     }
     enemy.x = 4
     enemy.isAttacking = false
@@ -316,7 +316,7 @@ describe('R13 — enemy attack pose persists until next action, not time-based',
   it('isAttacking initializes to false on spawn', () => {
     const enemy: EnemyInstance = {
       id: 1, defKey: 'crawler', x: 3, y: 3, fromX: 3, fromY: 3,
-      hp: 6, maxHp: 6, turnDebt: 0, isAttacking: false,
+      hp: 6, maxHp: 6, turnDebt: 0, isAttacking: false, lastMoveMs: 0,
     }
     expect(enemy.isAttacking).toBe(false)
   })

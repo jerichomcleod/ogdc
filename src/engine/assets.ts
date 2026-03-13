@@ -3,27 +3,27 @@
 const BASE = import.meta.env.BASE_URL
 
 // ── Wall textures ─────────────────────────────────────────────────────────────
-const STONE_PATH    = Array.from({ length: 7  }, (_, i) => `${BASE}walls/stone_${i + 1}.png`)
-const CATACOMB_PATH = Array.from({ length: 10 }, (_, i) => `${BASE}walls/catacombs_${i + 1}.png`)
-const MACHINE_PATH  = Array.from({ length: 12 }, (_, i) => `${BASE}walls/machinery_${i + 1}.png`)
+const STONE_PATH    = Array.from({ length: 7  }, (_, i) => `${BASE}walls_small/stone_${i + 1}.png`)
+const CATACOMB_PATH = Array.from({ length: 10 }, (_, i) => `${BASE}walls_small/catacombs_${i + 1}.png`)
+const MACHINE_PATH  = Array.from({ length: 12 }, (_, i) => `${BASE}walls_small/machinery_${i + 1}.png`)
 
 // ── Floor / ceiling textures ──────────────────────────────────────────────────
-const FLOOR_PATHS = Array.from({ length: 8 }, (_, i) => `${BASE}floors/floor_${i + 1}.png`)
-const CEIL_PATHS  = Array.from({ length: 8 }, (_, i) => `${BASE}floors/ceiling_${i + 1}.png`)
+const FLOOR_PATHS = Array.from({ length: 8 }, (_, i) => `${BASE}floors_small/floor_${i + 1}.png`)
+const CEIL_PATHS  = Array.from({ length: 8 }, (_, i) => `${BASE}floors_small/ceiling_${i + 1}.png`)
 
 // ── Door / world textures ─────────────────────────────────────────────────────
 const DOOR_CLOSED_PATHS = ['door_closed_1.png','door_closed_2.png','door_closed_3.png']
-  .map(f => `${BASE}doors/${f}`)
+  .map(f => `${BASE}doors_small/${f}`)
 const DOOR_OPEN_PATHS   = ['door_opened_1.png','door_opened_2.png','door_open_3.png']
-  .map(f => `${BASE}doors/${f}`)
-const STAIR_DOWN_PATH   = `${BASE}world/stair_down.png`
-const STAIR_UP_PATH     = `${BASE}world/stair_up.png`
+  .map(f => `${BASE}doors_small/${f}`)
+const STAIR_DOWN_PATH   = `${BASE}world_small/stair_down.png`
+const STAIR_UP_PATH     = `${BASE}world_small/stair_up.png`
 
 // ── Enemy sprite paths ────────────────────────────────────────────────────────
 // Organised as: ENEMY_SPRITE_PATHS[defKey][phase][frameIdx]
 // Phase keys are always 'stand' | 'attack' | 'dead' in code regardless of
 // filename convention (some files use 'standing_', mapped here to 'stand').
-const E = `${BASE}enemies/`
+const E = `${BASE}enemies_small/`
 const ENEMY_SPRITE_PATHS: Record<string, Record<string, string[]>> = {
   crawler: {
     stand:  [1,2,3].map(n => `${E}enemy_crawler_stand_${n}.png`),
@@ -50,12 +50,32 @@ const ENEMY_SPRITE_PATHS: Record<string, Record<string, string[]>> = {
     attack: [1,2,3].map(n => `${E}enemy_boneguard_attack_${n}.png`),
     dead:   [1,2,3].map(n => `${E}enemy_boneguard_dead_${n}.png`),
   },
+  wraith: {
+    stand:  [1,2].map(n => `${E}enemy_wraith_stand_${n}.png`),
+    attack: [1,2].map(n => `${E}enemy_wraith_attack_${n}.png`),
+    dead:   [1,2].map(n => `${E}enemy_wraith_dead_${n}.png`),
+  },
+  automaton: {
+    stand:  [1,2,3].map(n => `${E}enemy_automaton_stand_${n}.png`),
+    attack: [1,2,3].map(n => `${E}enemy_automaton_attack_${n}.png`),
+    dead:   [1,2,3].map(n => `${E}enemy_automaton_dead_${n}.png`),
+  },
+  drone: {
+    stand:  [1,2,3].map(n => `${E}enemy_sentry_stand_${n}.png`),
+    attack: [1,2,3].map(n => `${E}enemy_sentry_attack_${n}.png`),
+    dead:   [1,2,3].map(n => `${E}enemy_sentry_dead_${n}.png`),
+  },
+  behemoth: {
+    stand:  [1,2].map(n => `${E}enemy_behemoth_stand_${n}.png`),
+    attack: [1,2].map(n => `${E}enemy_behemoth_attack_${n}.png`),
+    dead:   [1,2,3].map(n => `${E}enemy_behemoth_dead_${n}.png`),
+  },
 }
 
 // ── Item sprite paths ─────────────────────────────────────────────────────────
 const ITEM_SPRITE_PATHS: Record<string, string> = {
-  potion_sm: `${BASE}items/potion_small.png`,
-  potion_lg: `${BASE}items/potion_large.png`,
+  potion_sm: `${BASE}items_small/potion_small.png`,
+  potion_lg: `${BASE}items_small/potion_large.png`,
 }
 
 
@@ -165,9 +185,29 @@ export async function preloadAssets(): Promise<void> {
   }
 }
 
-// Deterministic per-cell texture index — same result every visit for (cx, cy)
+// Deterministic per-cell texture index — no two orthogonally adjacent cells
+// with the same pool size (count) will receive the same index.
+// Memoized; recurses into left and top neighbours only. Right/bottom neighbours
+// check us as their left/top, so all four directions are covered automatically.
+const _cellTexCache = new Map<string, number>()
+
 export function cellTexIndex(cx: number, cy: number, count: number): number {
-  return ((cx * 1259 + cy * 2953 + cx * cy * 73) >>> 0) % count
+  const key = `${cx},${cy},${count}`
+  const hit = _cellTexCache.get(key)
+  if (hit !== undefined) return hit
+
+  const leftIdx = cx > 0 ? cellTexIndex(cx - 1, cy, count) : -1
+  const topIdx  = cy > 0 ? cellTexIndex(cx, cy - 1, count) : -1
+
+  const base = ((cx * 1259 + cy * 2953 + cx * cy * 73) >>> 0) % count
+  let result = base
+  for (let i = 0; i < count; i++) {
+    result = (base + i) % count
+    if (result !== leftIdx && result !== topIdx) break
+  }
+
+  _cellTexCache.set(key, result)
+  return result
 }
 
 function floorHash(floorId: string, seed: number): number {

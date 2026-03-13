@@ -74,10 +74,10 @@
 | sentinel | Stone Sentinel | stone | 18 | 5 | 2 | ✓ |
 | revenant | Revenant | catacomb | 10 | 3 | 1 | ✓ |
 | boneguard | Bone Guard | catacomb | 20 | 5 | 2 | ✓ |
-| wraith | Wraith | catacomb, machine | 7 | 4 | 1 | — (solid color) |
-| automaton | Automaton | machine | 14 | 4 | 2 | — (solid color) |
-| drone | Sentry Drone | machine | 8 | 5 | 1 | — (solid color) |
-| heavy | Heavy Unit | machine | 28 | 7 | 3 | — (solid color) |
+| wraith | Wraith | catacomb, machine | 7 | 4 | 1 | ✓ |
+| automaton | Automaton | machine | 14 | 4 | 2 | ✓ |
+| drone | Sentry Drone | machine | 8 | 5 | 1 | ✓ (files: enemy_sentry_*) |
+| behemoth | Behemoth | machine | 32 | 8 | 3 | ✓ (renders at 137.5% scale) |
 
 ### Items
 - [x] Healing potions placed on floors (1–3 per level)
@@ -116,20 +116,217 @@
 ## Pending
 
 ### High Priority
-- [ ] **Sprites for remaining enemies** — wraith, automaton, drone, heavy currently render as solid-color billboards
-- [ ] **Save / Load** — serialize `GameState` to localStorage or IndexedDB; auto-save on floor transition
 - [ ] **Persistent progression** — stats, unlocks, and run history survive browser refresh
+
+---
+
+## Planned Features (Next Sprint)
+
+### 1 — Surface Portals
+
+Portals on levels 3, 5, 7, 9, 11, 13, 15 that return the player to the surface (town). Once discovered (entered or walked past), a portal is saved permanently and accessible from the town menu as a fast-travel destination to resume from that floor.
+
+**Design:**
+- Each portal occupies the center cell of a dedicated **3×3 room** carved during generation
+- Portal room must NOT be the start room and must NOT contain the exit stairs
+- The portal is a **tall billboard sprite**: a floating blue diamond with a vertical gradient and soft ambient glow halo — rendered in the sprite pass, not as a wall override
+- Walking into the portal cell triggers return to town; the portal floor ID is stored as the re-entry point
+- From the town screen, each discovered portal appears as a separate "Descend to Floor N" menu entry
+
+**Files affected:**
+| File | Change |
+|---|---|
+| `content/types.ts` | Add `FloorPortal { x, y }` optional field to `FloorMap` |
+| `content/dungeonGen.ts` | Portal room generation: carve 3×3 room, place portal at center, only on floors at index 2,4,6,8,10,12,14 (levels 3,5…15); room chosen from non-start, non-exit graph nodes |
+| `content/floors.ts` | No interface change — portal position stored in `FloorMap` |
+| `engine/assets.ts` | Load `portal_1–4.png` animation frames from `assets/world/` |
+| `engine/renderer.ts` | Render portal as an animated sprite (cycle frames on `gameTick`); `scaleH ≈ 0.90`, `offY ≈ 0.06`; add soft blue glow by drawing a translucent blue rect around the sprite columns |
+| `systems/movementSystem.ts` | Detect portal cell on step-into; call `goToTown` and mark portal discovered |
+| `game/gameState.ts` | Add `discoveredPortals: Set<string>` (floor IDs) to `GameState`; add `portalReturnId: string \| null` for which portal the player last used |
+| `persistence/saveSystem.ts` | Serialize `discoveredPortals` as `string[]`; restore on load |
+| `ui/town.ts` | Show portal entries below normal menu items: "Return via Portal — Stone 3", etc. Selecting one calls `goToLevel(state, idx)` + spawns entities + sets mode to dungeon |
+
+**Assets needed:** see `assets_needed.md` — `portal_1–4.png`
+
+---
+
+### 2 — Inventory Screen
+
+A full-canvas overlay (toggled with **I**) showing the player's carried items in a scrollable grid and their equipment slots.
+
+**Layout (drawn on canvas, not HTML):**
+```
+┌────────────────────────────────────────┐
+│  INVENTORY              [I] to close   │
+│                                        │
+│  Equipment         Carried Items       │
+│  ┌──────────┐      ┌──┬──┬──┬──┬──┐   │
+│  │ WEAPON   │      │  │  │  │  │  │   │
+│  │ [item]   │      ├──┼──┼──┼──┼──┤   │
+│  │ ARMOR    │      │  │  │  │  │  │   │
+│  │ [item]   │      ├──┼──┼──┼──┼──┤   │
+│  │ SHIELD   │      │  │  │  │  │  │   │
+│  │ [item]   │      ├──┼──┼──┼──┼──┤   │
+│  └──────────┘      │  │  │  │  │  │   │
+│                    └──┴──┴──┴──┴──┘   │
+│  Gold: 0           20 slots           │
+│                                        │
+│  [selected item name]                  │
+│  [description]    [E] Equip [D] Drop   │
+└────────────────────────────────────────┘
+```
+
+- Grid: 4 rows × 5 columns = **20 carry slots**
+- Navigate grid with arrow keys; CONFIRM / E to equip or use; D (new action) to drop
+- Items show a small icon sprite in each slot; selected slot shows name + description below
+- Equipment panel on the left shows the three equip slots; selecting a slot unequips into carry grid
+
+**Files affected:**
+| File | Change |
+|---|---|
+| `engine/input.ts` | Add `DROP_ITEM` action (key D); `OPEN_INVENTORY` action already exists (key I) |
+| `game/gameState.ts` | Add `inventoryOpen: boolean`; `inventorySlot: number` (0–19, selected carry slot); `inventoryFocus: 'grid' \| 'equip'`; `inventoryEquipSlot: 'weapon' \| 'armor' \| 'shield' \| null` |
+| `ui/inventory.ts` | New file — `renderInventory(state)`: draws full overlay; handles equip/drop/navigate |
+| `game/gameLoop.ts` | In dungeon `update()`, check `OPEN_INVENTORY` to toggle; call `updateInventory(state)`; in `render()`, call `renderInventory(state)` when `inventoryOpen` |
+
+**Assets needed:** see `assets_needed.md` — item icons, slot frame, equipment slot backgrounds
+
+---
+
+### 3 — Equipment and Player Stats
+
+Replaces the hardcoded player attack (5–12) and introduces a full equipment and stat system.
+
+**Player stats (new struct `PlayerStats` in `gameState.ts`):**
+| Stat | Default (no gear) | Source |
+|---|---|---|
+| `attackMin` | 1 | base + weapon.min |
+| `attackMax` | 2 | base + weapon.max |
+| `defense` | 0 | armor.defense + shield.defense |
+| `gold` | 0 | picked up from floor / enemy drops |
+| `maxHp` | 60 | unchanged for now |
+
+**Equipment slots (stored in `RunState`):**
+```typescript
+equipment: {
+  weapon: ItemInstance | null
+  armor:  ItemInstance | null
+  shield: ItemInstance | null
+}
+```
+
+**Item changes:**
+- `ItemDef.effect` expands from `'heal'` to `'heal' | 'equip'`
+- `ItemDef` gains optional fields: `slot?: 'weapon' | 'armor' | 'shield'`, `attackMin?: number`, `attackMax?: number`, `defense?: number`
+- Consumables (potions) keep `effect: 'heal'`; equipment items use `effect: 'equip'`
+
+**New item definitions (initial set):**
+| Key | Name | Slot | Stats | Rarity / Depth |
+|---|---|---|---|---|
+| `dagger` | Rusty Dagger | weapon | +1–3 atk | stone 1–3 |
+| `short_sword` | Short Sword | weapon | +2–5 atk | stone 3–5 / catacomb 1–2 |
+| `longsword` | Longsword | weapon | +3–8 atk | catacomb 3–5 / machine 1–3 |
+| `great_blade` | Great Blade | weapon | +5–12 atk | machine 3–5 |
+| `leather_armor` | Leather Armor | armor | +1 def | stone 1–3 |
+| `chain_mail` | Chainmail | armor | +3 def | catacomb 1–3 |
+| `plate_armor` | Plate Armor | armor | +5 def | machine 2–5 |
+| `wooden_shield` | Wooden Shield | shield | +1 def | stone 1–4 |
+| `iron_shield` | Iron Shield | shield | +2 def | catacomb 2–5 / machine 1–3 |
+
+**Gold:**
+- Stored as `gold: number` in `RunState`; serialized in `SaveRun`
+- Enemies have a `goldMin/goldMax` range in `EnemyDef`; on kill, drop gold coin entity on floor
+- Player picks up gold automatically on step-into (no INTERACT needed)
+- Gold coin renders as a small billboard sprite
+
+**Carry limit:**
+- `inventory` array capped at **20 items** (reject pickup if full, log "Inventory full")
+- Displayed as the 4×5 grid in the inventory screen
+
+**Combat formula changes:**
+- Player attack: `uniform(attackMin, attackMax)` where min/max = base + weapon bonus
+- Enemy attack: `uniform(def.attackMin, def.attackMax)` — stochastic (see feature 4)
+- Damage received: `max(0, roll - playerDefense)`
+
+**Files affected:**
+| File | Change |
+|---|---|
+| `content/defs.ts` | Expand `ItemDef`; add equipment items to `ITEM_DEFS`; add `EnemyDef.goldMin/goldMax` |
+| `game/gameState.ts` | Add `equipment` and `gold` to `RunState`; derive player attack/defense from equipment |
+| `systems/entitySystem.ts` | On kill, roll gold drop and push a gold coin `ItemInstance`; auto-collect gold on step; check inventory cap on pickup |
+| `systems/movementSystem.ts` | Wire `DROP_ITEM` action to drop selected inventory item onto floor |
+| `persistence/saveSystem.ts` | Add `equipment` and `gold` to `SaveRun` |
+| `engine/assets.ts` | Load item icon sprites |
+
+---
+
+### 4 — Stochastic Damage and Defense
+
+All damage and HP values are drawn from **uniform distributions** at instantiation or hit time. No fixed values remain.
+
+**EnemyDef stat changes:**
+```typescript
+// Before
+hp:     number
+attack: number
+
+// After
+hpMin:     number
+hpMax:     number
+attackMin: number
+attackMax: number
+```
+
+**Enemy HP** is rolled once at spawn using the floor's seeded RNG:
+```typescript
+enemy.hp = enemy.maxHp = ri(rng, def.hpMin, def.hpMax)
+```
+This uses the existing deterministic `rng` in `generateEntities`, so layouts are still reproducible per seed.
+
+**Enemy attack** is rolled fresh each hit:
+```typescript
+const dmg = ri(Math.random, def.attackMin, def.attackMax)
+const dealt = Math.max(0, dmg - playerDefense)
+```
+Note: hit-time rolls use `Math.random` (non-seeded) for moment-to-moment variability.
+
+**Player attack** (feature 3 formula, restated here):
+```typescript
+const dmg = attackMin + Math.floor(Math.random() * (attackMax - attackMin + 1))
+```
+
+**Updated enemy stat table:**
+| Key | Name | HP range | Atk range | Speed |
+|---|---|---|---|---|
+| crawler | Cave Crawler | 4–8 | 1–3 | 1 |
+| shade | Shadow | 6–12 | 2–4 | 1 |
+| sentinel | Stone Sentinel | 14–22 | 4–7 | 2 |
+| revenant | Revenant | 7–14 | 2–5 | 1 |
+| boneguard | Bone Guard | 16–25 | 4–7 | 2 |
+| wraith | Wraith | 5–10 | 3–6 | 1 |
+| automaton | Automaton | 10–18 | 3–6 | 2 |
+| drone | Sentry Drone | 6–12 | 4–7 | 1 |
+| behemoth | Behemoth | 25–40 | 6–11 | 3 |
+
+**Files affected:**
+| File | Change |
+|---|---|
+| `content/defs.ts` | Replace `hp/attack` with `hpMin/hpMax/attackMin/attackMax` on `EnemyDef`; update all entries |
+| `systems/entitySystem.ts` | `generateEntities`: roll HP from `[hpMin, hpMax]` using seeded rng; `dealDamageToPlayer`: roll `[attackMin, attackMax]` via Math.random, subtract player defense; `playerAttack`: roll player damage from equipment stats |
+| `src/__tests__/entitySystem.test.ts` | Update fixtures to use new stat fields |
+| `src/__tests__/regressions.test.ts` | Update any hardcoded HP/attack expectations |
+
+---
 
 ### Gameplay
 - [ ] **Player progression** — Strength (attack), Endurance (max HP), Perception (reveal radius); level up on floor completion
-- [ ] **Full inventory UI** — overlay grid (I key), show held items with icons, use consumables from inventory
 - [ ] **Locked doors + key system** — key item placed on same floor, always reachable from spawn
 - [ ] **Relic system** — items with passive tradeoff effects; hold up to 2 at a time
   - Hollow Saint's Torch: reveals hidden passages, increases enemy aggression
   - Stone Sigil: +defense, slowed movement
   - Blood Thread Charm: heal on kill, reduced max HP
   - Cartographer's Eye: partial map reveal, enemies detect player through walls
-- [ ] **Enemy loot drops** — chance-based item drops on kill
+- [ ] **Enemy loot drops** — chance-based item drops on kill (gold always; gear with low probability)
 - [ ] **More enemy behaviors** — ranged attack, support/debuff, ambush, slow-heavy variants
 
 ### Content

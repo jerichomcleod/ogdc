@@ -12,10 +12,10 @@
 import { GameState, RunState, GameMode } from '../game/gameState'
 import { regenerateDungeons } from '../content/floors'
 import { Direction } from '../content/types'
-import { EnemyInstance, ItemInstance, Corpse } from '../content/defs'
+import { EnemyInstance, ItemInstance, Corpse, Equipment } from '../content/defs'
 
 const SAVE_KEY     = 'ogdc_save'
-const SAVE_VERSION = 1
+const SAVE_VERSION = 2
 
 // ── Serialized shape ─────────────────────────────────────────────────────────
 
@@ -31,6 +31,8 @@ interface SaveRun {
   corpses:         Corpse[]
   items:           ItemInstance[]
   inventory:       ItemInstance[]
+  equipment:       Equipment
+  gold:            number
   combatLog:       string[]
   entitiesSpawned: boolean
 }
@@ -43,6 +45,7 @@ interface SaveFile {
   mode:              GameMode
   townMenuIndex:     number
   shownLevelEntries: string[]
+  discoveredPortals: string[]
   run:               SaveRun
 }
 
@@ -55,10 +58,10 @@ function serialize(state: GameState): SaveFile {
     worldSeed:         state.worldSeed,
     levelIndex:        state.levelIndex,
     gameTick:          state.gameTick,
-    // Don't save game_over — resume in dungeon with 1 HP
     mode:              state.mode === 'game_over' ? 'dungeon' : state.mode,
     townMenuIndex:     state.townMenuIndex,
     shownLevelEntries: [...state.shownLevelEntries],
+    discoveredPortals: [...state.discoveredPortals],
     run: {
       floorId:         r.floorId,
       position:        { ...r.position },
@@ -68,9 +71,15 @@ function serialize(state: GameState): SaveFile {
       mapRevealed:     r.mapRevealed.map(row => [...row]),
       floorFlags:      { ...r.floorFlags },
       enemies:         r.enemies.map(e => ({ ...e })),
-      corpses:         [],    // mid-turn corpses are not worth persisting
+      corpses:         [],
       items:           r.items.map(i => ({ ...i })),
       inventory:       r.inventory.map(i => ({ ...i })),
+      equipment:       {
+        weapon: r.equipment.weapon ? { ...r.equipment.weapon } : null,
+        armor:  r.equipment.armor  ? { ...r.equipment.armor  } : null,
+        shield: r.equipment.shield ? { ...r.equipment.shield } : null,
+      },
+      gold:            r.gold,
       combatLog:       [...r.combatLog],
       entitiesSpawned: r.entitiesSpawned,
     },
@@ -80,22 +89,24 @@ function serialize(state: GameState): SaveFile {
 // ── Deserialize ───────────────────────────────────────────────────────────────
 
 function deserialize(data: SaveFile, state: GameState): void {
-  // Reconstruct procedural floors from the stored seed
   regenerateDungeons(data.worldSeed)
 
-  state.worldSeed          = data.worldSeed
-  state.levelIndex         = data.levelIndex
-  state.gameTick           = data.gameTick
-  state.mode               = data.mode
-  state.townMenuIndex      = data.townMenuIndex
-  state.shownLevelEntries  = new Set(data.shownLevelEntries)
+  state.worldSeed         = data.worldSeed
+  state.levelIndex        = data.levelIndex
+  state.gameTick          = data.gameTick
+  state.mode              = data.mode
+  state.townMenuIndex     = data.townMenuIndex
+  state.shownLevelEntries = new Set(data.shownLevelEntries)
+  state.discoveredPortals = new Set(data.discoveredPortals ?? [])
 
-  // Reset ephemeral timing fields
-  state.gameOverMs         = 0
-  state.gameOverMessage    = ''
-  state.gameOverMenuIndex  = 0
-  state.enemyMoveMs        = 0
-  state.lastActionWasTurn  = false
+  state.gameOverMs        = 0
+  state.gameOverMessage   = ''
+  state.gameOverMenuIndex = 0
+  state.enemyMoveMs       = 0
+  state.lastActionWasTurn = false
+  state.inventoryOpen     = false
+  state.inventorySlot     = 0
+  state.inventoryFocus    = 'grid'
 
   const r = data.run
   const run: RunState = {
@@ -111,8 +122,10 @@ function deserialize(data: SaveFile, state: GameState): void {
     corpses:         r.corpses,
     items:           r.items,
     inventory:       r.inventory,
+    equipment:       r.equipment ?? { weapon: null, armor: null, shield: null },
+    gold:            r.gold ?? 0,
     combatLog:       r.combatLog,
-    levelEntryMs:    0,       // don't replay entry animation
+    levelEntryMs:    0,
     playerActed:     false,
     deadEndMsg:      '',
     deadEndMs:       null,
@@ -188,7 +201,7 @@ export async function importSave(state: GameState): Promise<boolean> {
           const data = JSON.parse(ev.target!.result as string) as unknown
           if (!validate(data)) { resolve(false); return }
           deserialize(data, state)
-          saveGame(state)    // mirror to localStorage
+          saveGame(state)
           resolve(true)
         } catch {
           resolve(false)

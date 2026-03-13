@@ -227,6 +227,30 @@ export function renderDeadEnd(state: GameState): void {
   ctx.restore()
 }
 
+// ── Cheat console overlay ─────────────────────────────────────────────────────
+
+export function renderCheatConsole(buffer: string): void {
+  const ctx  = getCtx()
+  const text = '> ' + buffer + '_'
+  const boxW = CANVAS_W - 40
+  const boxH = 36
+  const boxX = 20
+  const boxY = Math.floor(CANVAS_H / 2) - 18
+
+  ctx.save()
+  ctx.fillStyle = 'rgba(0,0,0,0.88)'
+  ctx.fillRect(boxX, boxY, boxW, boxH)
+  ctx.strokeStyle = '#c8a96a'
+  ctx.lineWidth   = 1
+  ctx.strokeRect(boxX, boxY, boxW, boxH)
+
+  ctx.fillStyle = '#c8a96a'
+  ctx.font      = '14px monospace'
+  ctx.textAlign = 'left'
+  ctx.fillText(text, boxX + 10, boxY + boxH / 2 + 5)
+  ctx.restore()
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function wrapText(text: string, maxChars: number): string[] {

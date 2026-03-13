@@ -1,16 +1,16 @@
-import { GameState, makeInitialState, returnToDungeon } from './gameState'
+import { GameState, makeInitialState, returnToDungeon, returnToPortal, goToLevel } from './gameState'
 import { clear } from '../engine/canvas'
-import { consumeAction, flushInput } from '../engine/input'
+import { consumeAction, flushInput, openCheatConsole, isCheatConsoleActive, getCheatConsoleBuffer, consumeCheatSubmit } from '../engine/input'
 import { processMovement } from '../systems/movementSystem'
 import { processEnemyTurns, generateEntities } from '../systems/entitySystem'
 import { renderDungeon } from '../engine/renderer'
 import { renderMinimap } from '../ui/minimap'
-import { renderLevelEntry, renderGameOver, renderCombatLog, renderHpOverlay, renderDeadEnd } from '../ui/overlays'
+import { renderLevelEntry, renderGameOver, renderCombatLog, renderHpOverlay, renderDeadEnd, renderCheatConsole } from '../ui/overlays'
 import { renderTown, townMenuItemCount, getTownMenuAction, handleTownSaveAction } from '../ui/town'
+import { renderInventory, updateInventory } from '../ui/inventory'
 import { loadGame } from '../persistence/saveSystem'
 
 export function startLoop(state: GameState): void {
-  // Populate the first floor's entities
   spawnEntitiesForFloor(state)
 
   function frame() {
@@ -24,6 +24,37 @@ export function startLoop(state: GameState): void {
 function update(state: GameState): void {
   switch (state.mode) {
     case 'dungeon':
+      // Inventory takes priority — intercepts all input while open
+      if (state.inventoryOpen) {
+        updateInventory(state)
+        break
+      }
+
+      // Open inventory
+      if (consumeAction('OPEN_INVENTORY')) {
+        state.inventoryOpen  = true
+        state.inventoryFocus = 'grid'
+        state.inventorySlot  = 0
+        flushInput()
+        break
+      }
+
+      // Open cheat console on Enter
+      if (consumeAction('CONFIRM')) {
+        openCheatConsole()
+        flushInput()
+        break
+      }
+
+      // Process cheat submission
+      {
+        const cheat = consumeCheatSubmit()
+        if (cheat) {
+          processCheat(cheat, state)
+          break
+        }
+      }
+
       processMovement(state)
       tickAnim(state)
       if (state.run.playerActed) {
@@ -32,7 +63,7 @@ function update(state: GameState): void {
         state.enemyMoveMs = performance.now()
         state.run.playerActed = false
       }
-      // Remove corpses from any previous position once player has moved away
+      // Remove corpses once player has moved away from kill site
       if (state.run.corpses.length) {
         const px = state.run.position.x, py = state.run.position.y
         state.run.corpses = state.run.corpses.filter(
@@ -43,7 +74,7 @@ function update(state: GameState): void {
 
     case 'game_over': {
       const elapsed = performance.now() - state.gameOverMs
-      if (elapsed < 2000) break  // text phase — no input yet
+      if (elapsed < 2000) break
 
       if (consumeAction('MOVE_FORWARD') || consumeAction('TURN_LEFT')) {
         state.gameOverMenuIndex = Math.max(0, state.gameOverMenuIndex - 1)
@@ -53,13 +84,11 @@ function update(state: GameState): void {
       }
       if (consumeAction('CONFIRM') || consumeAction('INTERACT')) {
         if (state.gameOverMenuIndex === 0) {
-          // New Game
           flushInput()
           const fresh = makeInitialState()
           Object.assign(state, fresh)
           spawnEntitiesForFloor(state)
         } else if (state.gameOverMenuIndex === 1) {
-          // Load Game
           flushInput()
           const loaded = loadGame(state)
           if (loaded) {
@@ -81,16 +110,20 @@ function updateTown(state: GameState): void {
     state.townMenuIndex = Math.max(0, state.townMenuIndex - 1)
   }
   if (consumeAction('MOVE_BACK') || consumeAction('TURN_RIGHT')) {
-    state.townMenuIndex = Math.min(townMenuItemCount() - 1, state.townMenuIndex + 1)
+    state.townMenuIndex = Math.min(townMenuItemCount(state) - 1, state.townMenuIndex + 1)
   }
   if (consumeAction('INTERACT') || consumeAction('CONFIRM')) {
-    const action = getTownMenuAction(state.townMenuIndex)
+    const action = getTownMenuAction(state, state.townMenuIndex)
     if (action === 'dungeon') {
       returnToDungeon(state)
       spawnEntitiesForFloor(state)
     } else if (action === 'rest') {
       state.run.hp = state.run.maxHp
       state.run.combatLog = ['You feel restored.']
+    } else if (action.startsWith('portal:')) {
+      const floorId = action.slice(7)
+      returnToPortal(state, floorId)
+      spawnEntitiesForFloor(state)
     } else if (action === 'save' || action === 'export' || action === 'import') {
       handleTownSaveAction(action, state).then(ok => {
         if (action === 'import' && ok) {
@@ -109,7 +142,6 @@ function tickAnim(state: GameState): void {
   const t = (performance.now() - state.run.anim.startMs) / state.run.anim.durationMs
   if (t >= 1) {
     state.run.anim = null
-    // Spawn entities when entering a new floor for the first time
     if (!state.run.entitiesSpawned) {
       spawnEntitiesForFloor(state)
     }
@@ -126,14 +158,13 @@ function render(state: GameState): void {
       renderCombatLog(state)
       renderLevelEntry(state)
       renderDeadEnd(state)
+      if (isCheatConsoleActive()) renderCheatConsole(getCheatConsoleBuffer())
+      if (state.inventoryOpen)    renderInventory(state)
       break
 
     case 'game_over': {
       const elapsed = performance.now() - state.gameOverMs
-      if (elapsed < 2000) {
-        // Render the dungeon as background then overlay death screen
-        renderDungeon(state)
-      }
+      if (elapsed < 2000) renderDungeon(state)
       renderGameOver(state)
       break
     }
@@ -153,4 +184,15 @@ function spawnEntitiesForFloor(state: GameState): void {
   state.run.enemies         = enemies
   state.run.items           = items
   state.run.entitiesSpawned = true
+}
+
+function processCheat(text: string, state: GameState): void {
+  const m = text.trim().match(/^showmetheway\s+(\d+)$/)
+  if (m) {
+    const level = parseInt(m[1], 10)
+    if (level >= 1 && level <= 15) {
+      goToLevel(state, level - 1)
+      spawnEntitiesForFloor(state)
+    }
+  }
 }

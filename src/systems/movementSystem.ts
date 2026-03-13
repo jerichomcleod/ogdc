@@ -1,4 +1,4 @@
-import { GameState, advanceLevel, goUp } from '../game/gameState'
+import { GameState, advanceLevel, goUp, goToTown } from '../game/gameState'
 import { consumeAction } from '../engine/input'
 import { stepOffset, turnLeft, turnRight, isPassable, revealAround } from './mapSystem'
 import { getFloor } from '../content/floors'
@@ -44,6 +44,7 @@ export function processMovement(state: GameState): void {
       revealAround(state)
       tryPickupItem(run, nx, ny)
       checkDeadEnd(state)
+      if (checkPortalTransit(state, nx, ny)) break
       run.anim = { type: 'forward', prevFacing: prev, startMs: performance.now(), durationMs: MOVE_MS }
     }
 
@@ -59,6 +60,7 @@ export function processMovement(state: GameState): void {
       revealAround(state)
       tryPickupItem(run, nx, ny)
       checkDeadEnd(state)
+      if (checkPortalTransit(state, nx, ny)) break
       run.anim = { type: 'back', prevFacing: prev, startMs: performance.now(), durationMs: MOVE_MS }
     }
 
@@ -168,4 +170,14 @@ function tryStairTransit(state: GameState, tx: number, ty: number): boolean {
   if (cell.wallOverride === 'stairs_down') { advanceLevel(state); return true }
   if (cell.wallOverride === 'stairs_up' || cell.wallOverride === 'town_gate') { goUp(state); return true }
   return false
+}
+
+// ── Portal transit (floor cell — triggered after stepping onto it) ─────────────
+
+function checkPortalTransit(state: GameState, nx: number, ny: number): boolean {
+  const floor = getFloor(state.run.floorId)
+  if (!floor || floor.portalX !== nx || floor.portalY !== ny) return false
+  state.discoveredPortals.add(state.run.floorId)
+  goToTown(state)
+  return true
 }

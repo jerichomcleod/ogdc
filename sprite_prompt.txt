@@ -1,4 +1,4 @@
-Create a 3×3 pixel-art sprite sheet for a retro dark-fantasy dungeon crawler enemy called Revenant.
+Create a 3×3 pixel-art sprite sheet for a retro dark-fantasy dungeon crawler enemy called Heavy.
 
 Layout:
 
@@ -13,24 +13,21 @@ Critical orientation rules:
 - Idle and attack sprites must face perfectly straight forward.
 - The enemy’s shoulders must be symmetrical.
 - The head must point directly at the viewer.
-- No side view. No 3/4 view. No turned torso. No angled stance.
 - The sprite must look like a first-person game target standing directly in front of the player.
 
 Attack animation:
-- Wielding a rusty sword and buckler
-- Weapon swings across the body, creating a motion arc, but the body remains front-facing.
+- wields a heavy mace. 
 - The weapon must not be pointed toward the viewer.
-- No motion blur
-- Arc allowed, but no turning of the body.
 
 Dead pose:
 - May fall sideways, forward, or backward.
 - Orientation unrestricted.
+- appears as a pile of parts instead of a body
 
 Enemy design:
-- Ivory color skeletal warrior
+- A mechanical juggernaut, steel, iron, and tungsten colors
 - Muted palette fitting a dungeon crawler with a serious tone
-- Wearing tattered leather armor
+- Exposed metal parts and mechanisms.
 
 Style:
 - Retro pixel-art game sprite
@@ -38,7 +35,6 @@ Style:
 - Clean readable silhouette
 - Rendering constraints:
 - Transparent background
-- No scenery, floor, border, or backdrop
 - Each sprite clearly separated
 - Consistent scale
 - PNG sprite-sheet style
@@ -49,3 +45,7 @@ Negative constraints:
 - No glowing eyes
 - No bright magical effects
 - No background
+- No scenery, floor, border, or backdrop
+- No motion blur
+- No turning of the body.
+- No side view. No 3/4 view. No turned torso. No angled stance.

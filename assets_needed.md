@@ -77,34 +77,102 @@ These wall override types are defined in code. Door and stair textures now exist
 
 ---
 
-### Enemy Sprites (9 needed)
+### Enemy Sprites
 
-Currently rendered as solid-color billboards. Each needs a PNG with transparent background — the renderer composites them as 3D billboards. Enemies render at **75% of wall face height**; sprites should fill the frame vertically.
+Currently rendered as solid-color billboards until sprites are provided. Each needs a PNG with transparent background — the renderer composites them as 3D billboards. Enemies render at **75% of wall face height**; sprites should fill the frame vertically. Each enemy has separate **stand**, **attack**, and **dead** animation frames.
 
-Recommended size: **128×128 px** (or 64×64 minimum), transparent PNG.
+Recommended size: **128×128 px** (or 64×64 minimum), transparent PNG. Naming convention: `enemy_{key}_{phase}_{frame}.png`.
 
-| Filename | Enemy | Theme | Color hint |
-|----------|-------|-------|-----------|
-| `enemy_crawler.png` | Cave Crawler | Stone | Dim green — small, insectoid |
-| `enemy_shade.png` | Shadow | Stone | Dark purple — wispy silhouette |
-| `enemy_sentinel.png` | Stone Sentinel | Stone | Slate blue-grey — large humanoid |
-| `enemy_revenant.png` | Revenant | Catacomb | Amber glow — undead humanoid |
-| `enemy_boneguard.png` | Bone Guard | Catacomb | Ivory/white — skeletal soldier |
-| `enemy_wraith.png` | Wraith | Catacomb/Machine | Teal — translucent, flowing |
-| `enemy_automaton.png` | Automaton | Machine | Bronze/orange — mechanical humanoid |
-| `enemy_drone.png` | Sentry Drone | Machine | Red-orange — floating |
-| `enemy_heavy.png` | Heavy Unit | Machine | Dark red — large, armored |
+**✅ Sprites already provided** (in `assets/enemies/`):
+
+| Enemy | Stand | Attack | Dead | Notes |
+|-------|-------|--------|------|-------|
+| Cave Crawler | `_stand_1–3` | `_attack_1–3` | `_dead_1–3` | Stone/catacomb |
+| Shadow | `_stand_1–2` | `_attack_1–2` | `_dead_1–2` | Stone |
+| Stone Sentinel | `_stand_1–3` | `_attack_1–2` | `_dead_1–3` | Stone |
+| Revenant | `_stand_1–3` | `_attack_1–2` | `_dead_1–3` | Catacomb |
+| Bone Guard | `_stand_1–3` | `_attack_1–2` | `_dead_1–3` | Catacomb |
+| Wraith | `_stand_1–2` | `_attack_1–2` | `_dead_1–2` | Catacomb/Machine — teal, translucent |
+| Automaton | `_stand_1–3` | `_attack_1–3` | `_dead_1–3` | Machine — bronze/orange |
+| Sentry Drone | `_stand_1–3` | `_attack_1–3` | `_dead_1–3` | Machine — files named `enemy_sentry_*` |
+| Behemoth | `_stand_1–2` | `_attack_1–2` | `_dead_1–3` | Machine — dark red, renders at 137.5% scale |
+
+**Still needed:** All enemy sprites are wired; no additional enemy sprite assets are currently required.
 
 ---
 
-### Item Sprites (2 needed)
+### Item Sprites
 
-Items render at **28% of wall face height**, shifted toward the floor (ground-level objects). Keep them small and readable at low resolution.
+Items render as 3D billboards at ground level. Two rendering sizes are used:
+- **Consumables** (potions): ~28% of wall height, shifted toward floor
+- **Equipment / gold** (planned — Feature 3): same billboard system, similar scale
+
+**✅ Done:**
 
 | Filename | Item | Notes |
 |----------|------|-------|
 | `item_potion_sm.png` | Healing Draught | Small vial, red liquid |
 | `item_potion_lg.png` | Healing Potion | Larger flask, brighter red |
+
+**Needed for Feature 3 (Equipment System):**
+
+Equipment and gold items will render as in-world billboards when dropped on the floor, and as small icon thumbnails inside the inventory screen grid.
+
+Recommended: **two versions per item** — a **world sprite** (128×128 transparent PNG, readable at small sizes) and an **icon sprite** (32×32 transparent PNG for the inventory grid slot).
+
+| Key | World sprite filename | Icon filename | Description |
+|-----|-----------------------|---------------|-------------|
+| `dagger` | `item_dagger.png` | `icon_dagger.png` | Short blade, rusted edge — Stone depths |
+| `short_sword` | `item_short_sword.png` | `icon_short_sword.png` | Single-edged blade, wrapped hilt |
+| `longsword` | `item_longsword.png` | `icon_longsword.png` | Double-edged, crossguard |
+| `great_blade` | `item_great_blade.png` | `icon_great_blade.png` | Wide two-handed blade, dark metal |
+| `leather_armor` | `item_leather_armor.png` | `icon_leather_armor.png` | Studded chest plate |
+| `chain_mail` | `item_chain_mail.png` | `icon_chain_mail.png` | Linked rings, medieval style |
+| `plate_armor` | `item_plate_armor.png` | `icon_plate_armor.png` | Solid steel breastplate |
+| `wooden_shield` | `item_wooden_shield.png` | `icon_wooden_shield.png` | Round wooden buckler |
+| `iron_shield` | `item_iron_shield.png` | `icon_iron_shield.png` | Kite shield, iron boss |
+| `gold_coin` | `item_gold_coin.png` | `icon_gold_coin.png` | Coin pile or scattered coins — auto-collected on step |
+
+Place world sprites in `assets/items/`, icon sprites in `assets/items/icons/` (or same folder with `icon_` prefix — your call).
+
+---
+
+### Portal Sprites — Feature 1 (4 frames needed)
+
+Portals appear on levels 3, 5, 7, 9, 11, 13, and 15 in dedicated 3×3 rooms. They render as **animated tall billboards** — the renderer cycles through frames based on game tick, producing a floating, pulsing effect.
+
+**Render spec:**
+- `scaleH ≈ 0.90` (90% of wall height — notably taller than enemies)
+- `offY ≈ 0.06` (center slightly above mid-wall — the top floats upward)
+- A soft blue glow drawn as translucent rect columns around the sprite (handled in code)
+
+| Filename | Description |
+|----------|-------------|
+| `assets/world/portal_1.png` | Frame 1 — portal "closed" or dim state |
+| `assets/world/portal_2.png` | Frame 2 — expanding inner glow |
+| `assets/world/portal_3.png` | Frame 3 — fully bright, inner energy visible |
+| `assets/world/portal_4.png` | Frame 4 — slightly contracted, flickering |
+
+**Visual direction:** A vertically elongated floating diamond or oval gate. Electric blue-white core with a dark outer halo. Faint particle wisps at top and bottom. Style should feel ancient-magical rather than sci-fi — no clean geometry. The four frames should loop smoothly when cycled at ~4 FPS.
+
+**Recommended size:** 128×256 px (2:1 portrait), transparent PNG. The sprite is taller than it is wide to match the `scaleH 0.90` render height.
+
+---
+
+### Inventory UI Assets — Feature 2
+
+The inventory screen is drawn entirely on canvas. Most visual elements are rendered programmatically (colored rectangles, text), but slot and panel textures add tactile quality.
+
+All optional — the UI degrades gracefully to flat colored rectangles if these are absent.
+
+| Filename | Size | Description |
+|----------|------|-------------|
+| `assets/ui/slot_frame.png` | 40×40 px | Border texture for an inventory grid slot. Used for all 20 carry slots. Transparent interior so item icon shows through. Dark stone/metal frame. |
+| `assets/ui/slot_selected.png` | 40×40 px | Same as above but highlighted — bright gold or white inner glow — used on the currently selected slot. |
+| `assets/ui/equip_weapon.png` | 56×56 px | Silhouette background for the weapon equipment slot. Shows a faint sword-shape watermark in the slot. |
+| `assets/ui/equip_armor.png` | 56×56 px | Same for armor slot — faint chest plate silhouette. |
+| `assets/ui/equip_shield.png` | 56×56 px | Same for shield slot — faint round shield silhouette. |
+| `assets/ui/panel_bg.png` | 640×480 px | Semi-transparent dark panel overlay for the entire inventory screen. Can be a simple vignette or textured parchment. Used at partial opacity behind all UI elements. |
 
 ---
 
@@ -210,6 +278,10 @@ Short text when stepping on the exit cell. Can be atmospheric rather than mechan
 
 - **Wall textures**: 640×640 PNG, RGBA (alpha ignored by renderer — can be RGB). Square. Power-of-two not strictly required but recommended.
 - **Floor/Ceiling textures**: Any square PNG. 256×256 or 512×512 recommended. Tileable.
-- **UI sprites**: PNG with transparency. Pixel art at game resolution (640×480) is cleanest.
+- **Enemy sprites**: Any square PNG with transparent background. 128×128 recommended. Renderer scales to match wall projection height. Tall enemies (behemoth) use the same square frame — the scale factor is applied in code.
+- **Portal sprites**: 128×256 portrait PNG. Transparent background. Four frames for animation loop.
+- **Item world sprites**: 128×128 PNG with transparency. Simple, readable silhouette at small sizes.
+- **Item icon sprites**: 32×32 PNG with transparency. Shown inside 40×40 slot frames in the inventory grid.
+- **UI sprites**: PNG with transparency. Pixel art at game resolution (640×480) is cleanest. Slot frames at 40×40; equipment slots at 56×56.
 - **Audio**: OGG Vorbis preferred for web delivery. MP3 also fine. Ambient loops should be seamlessly loopable.
 - **Writing**: Plain text or markdown is fine. Can be delivered directly as copy.

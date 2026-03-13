@@ -314,7 +314,11 @@ function renderToBuffer(
     const sprH     = Math.floor(faceH * s.scaleH)
     const half     = sprH >> 1  // integer half-width/height avoids float column drift
 
-    const screenCY = HORIZON_Y + Math.floor(faceH * s.offY)
+    const screenCY  = HORIZON_Y + Math.floor(faceH * s.offY)
+    const spriteL   = screenCX - half   // true left edge (may be off-screen)
+    const spriteT   = screenCY - half   // true top  edge (may be off-screen)
+    const fullSpan  = half << 1         // = 2 * half
+
     const drawT    = Math.max(0,          screenCY - half)
     const drawB    = Math.min(DUNGEON_H - 1, screenCY + half)
     const drawL    = Math.max(0,          screenCX - half)
@@ -329,10 +333,10 @@ function renderToBuffer(
     for (let sx = drawL; sx <= drawR; sx++) {
       if (zTest >= _zBuf[sx]) continue  // behind wall
       if (tex) {
-        // Textured sprite — sample the PNG pixel data, apply distance fade
-        const u = Math.floor(((sx - drawL) / Math.max(1, drawR - drawL)) * tex.w)
+        // U mapped against full sprite extent so partial off-screen clips correctly
+        const u = Math.floor(((sx - spriteL) / Math.max(1, fullSpan)) * tex.w)
         for (let sy = drawT; sy <= drawB; sy++) {
-          const v    = Math.floor(((sy - drawT) / Math.max(1, drawB - drawT)) * tex.h)
+          const v    = Math.floor(((sy - spriteT) / Math.max(1, fullSpan)) * tex.h)
           const raw  = tex.pixels[v * tex.w + u] ?? 0
           const a    = (raw >>> 24) & 0xFF
           if (a < 128) continue   // transparent pixel
@@ -381,9 +385,10 @@ export function renderDungeon(state: GameState): void {
   const ctx   = getCtx()
   const run   = state.run
   const anim  = run.anim
-  const theme = getFloor(run.floorId)?.theme ?? 'stone'
+  const floor = getFloor(run.floorId)
+  const theme = floor?.theme ?? 'stone'
 
-  const now = performance.now()
+  const now   = performance.now()
 
   // Pick the correct sprite pixels for a live enemy.
   // Always frame 0 (_1 sprite). Phase set by enemy's persistent isAttacking flag.
@@ -391,26 +396,46 @@ export function renderDungeon(state: GameState): void {
     return getEnemySpritePixels(defKey, isAttacking ? 'attack' : 'stand', 0)
   }
 
-  // Smooth enemy movement: interpolate from fromX/fromY → x/y over ENEMY_MOVE_MS.
+  // Each enemy has its own animation timer (lastMoveMs) so animations run to
+  // completion independently — no global reset that snaps positions mid-move.
   const ENEMY_MOVE_MS = 250
-  const rawT    = Math.min(1, (now - state.enemyMoveMs) / ENEMY_MOVE_MS)
-  const enemyT  = rawT * rawT * (3 - 2 * rawT)   // smoothstep
 
-  // Build sprite list from enemies + corpses + items on the current floor
+  // Build sprite list from enemies + corpses + items + portal on the current floor
+  const floor = getFloor(run.floorId)
   const sprites: Sprite[] = [
-    ...run.enemies.map(e => ({
-      wx: e.fromX + (e.x - e.fromX) * enemyT + 0.5,
-      wy: e.fromY + (e.y - e.fromY) * enemyT + 0.5,
-      color: (getEnemyDef(e.defKey)?.color ?? 0xFF00FFFF),
-      scaleH: 0.65, offY: 0.18,
-      pixels: enemyPixels(e.defKey, e.isAttacking),
-    })),
-    ...run.corpses.map(c => ({
-      wx: c.x + 0.5, wy: c.y + 0.5,
-      color: (getEnemyDef(c.defKey)?.color ?? 0xFF404040),
-      scaleH: 0.72, offY: 0.22,
-      pixels: getEnemySpritePixels(c.defKey, 'dead', 0),
-    })),
+    // Portal — bright electric-blue billboard; scaleH=0.85 with feet anchored at floor level
+    ...(floor?.portalX !== undefined ? [{
+      wx: floor.portalX! + 0.5,
+      wy: floor.portalY! + 0.5,
+      color: 0xFFE09618 as number,   // RGB(24, 150, 224) packed little-endian
+      scaleH: 0.85,
+      offY:   0.505 - 0.85 / 2,     // ≈ 0.08 — feet at floor line
+      pixels: undefined,
+    }] : []),
+    ...run.enemies.map(e => {
+      const rawT   = Math.min(1, (now - e.lastMoveMs) / ENEMY_MOVE_MS)
+      const eT     = rawT * rawT * (3 - 2 * rawT)   // smoothstep
+      const liveScale = e.defKey === 'behemoth' ? 1.375 : 1.0
+      // Adjust offY so the behemoth's feet land on the same floor line as other
+      // enemies regardless of scale: offY = (normal offY + normal scaleH/2) - scaledH/2
+      const offY = 0.505 - (0.65 * liveScale) / 2
+      return {
+        wx: e.fromX + (e.x - e.fromX) * eT + 0.5,
+        wy: e.fromY + (e.y - e.fromY) * eT + 0.5,
+        color: (getEnemyDef(e.defKey)?.color ?? 0xFF00FFFF),
+        scaleH: 0.65 * liveScale, offY,
+        pixels: enemyPixels(e.defKey, e.isAttacking),
+      }
+    }),
+    ...run.corpses.map(c => {
+      const deadScale = c.defKey === 'behemoth' ? 0.9 : 1.0
+      return {
+        wx: c.x + 0.5, wy: c.y + 0.5,
+        color: (getEnemyDef(c.defKey)?.color ?? 0xFF404040),
+        scaleH: 0.72 * deadScale, offY: 0.22,
+        pixels: getEnemySpritePixels(c.defKey, 'dead', 0),
+      }
+    }),
     ...run.items.map(it => ({
       wx: it.x + 0.5, wy: it.y + 0.5,
       color: (getItemDef(it.defKey)?.color ?? 0xFF00FF00),

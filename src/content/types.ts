@@ -35,4 +35,6 @@ export interface FloorMap {
   returnFacing: Direction // facing direction when returning from below
   entryWallX: number      // WALL cell with stairs_up or town_gate
   entryWallY: number
+  portalX?: number        // floor cell containing the surface portal (undefined = no portal)
+  portalY?: number
 }

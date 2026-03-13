@@ -261,9 +261,11 @@ interface RasterResult {
   returnFacing: Direction
   entryWallX:   number   // WALL cell: stairs_up (caller may override to town_gate)
   entryWallY:   number
+  portalX?:     number   // floor cell containing surface portal (undefined = no portal)
+  portalY?:     number
 }
 
-function rasterize(graph: DunGraph, positions: Map<number, RoomPos>, r: () => number): RasterResult {
+function rasterize(graph: DunGraph, positions: Map<number, RoomPos>, r: () => number, hasPortal: boolean): RasterResult {
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
   for (const { rx, ry } of positions.values()) {
     if (rx < minX) minX = rx; if (rx > maxX) maxX = rx
@@ -449,6 +451,23 @@ function rasterize(graph: DunGraph, positions: Map<number, RoomPos>, r: () => nu
     return f === 'north' ? 'south' : f === 'south' ? 'north' : f === 'east' ? 'west' : 'east'
   }
 
+  // ── Place portal in a POI room (if this floor has one) ───────────────────
+  let portalX: number | undefined
+  let portalY: number | undefined
+  if (hasPortal) {
+    const poiNodes = shuffle([...graph.nodes.values()].filter(n => n.role === 'poi'), r)
+    for (const node of poiNodes) {
+      const pp = positions.get(node.id)
+      if (!pp) continue
+      const cx = toCx(pp.rx), cy = toCy(pp.ry)
+      if (cells[cy]?.[cx]?.type === 'floor') {
+        portalX = cx
+        portalY = cy
+        break
+      }
+    }
+  }
+
   return {
     cells, width: cellW, height: cellH,
     spawnX:       entrySlot?.floorX ?? spCx,
@@ -461,16 +480,21 @@ function rasterize(graph: DunGraph, positions: Map<number, RoomPos>, r: () => nu
     returnFacing: oppDir(exitSlot?.facing ?? 'north'),   // face INTO the level when returning
     entryWallX:   entrySlot?.wallX ?? spCx,
     entryWallY:   entrySlot?.wallY ?? spCy,
+    portalX,
+    portalY,
   }
 }
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
-export function generateFloor(id: string, theme: FloorTheme, seed: number, _levelIndex: number): FloorMap {
-  const r     = makeRng(seed)
-  const graph = buildGraph(r)
-  const pos   = layoutGraph(graph, r)
-  const rast  = rasterize(graph, pos, r)
+const PORTAL_LEVEL_INDICES = new Set([2, 4, 6, 8, 10, 12, 14])
+
+export function generateFloor(id: string, theme: FloorTheme, seed: number, levelIndex: number): FloorMap {
+  const r          = makeRng(seed)
+  const graph      = buildGraph(r)
+  const pos        = layoutGraph(graph, r)
+  const hasPortal  = PORTAL_LEVEL_INDICES.has(levelIndex)
+  const rast       = rasterize(graph, pos, r, hasPortal)
 
   const floor: FloorMap = {
     id,
@@ -488,6 +512,8 @@ export function generateFloor(id: string, theme: FloorTheme, seed: number, _leve
     returnFacing: rast.returnFacing,
     entryWallX:   rast.entryWallX,
     entryWallY:   rast.entryWallY,
+    portalX:      rast.portalX,
+    portalY:      rast.portalY,
   }
 
   return floor
