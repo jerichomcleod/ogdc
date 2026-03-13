@@ -44,8 +44,8 @@ export function processMovement(state: GameState): void {
       revealAround(state)
       tryPickupItem(run, nx, ny)
       checkDeadEnd(state)
-      if (checkPortalTransit(state, nx, ny)) break
-      run.anim = { type: 'forward', prevFacing: prev, startMs: performance.now(), durationMs: MOVE_MS }
+      if (!checkPortalTransit(state, nx, ny))
+        run.anim = { type: 'forward', prevFacing: prev, startMs: performance.now(), durationMs: MOVE_MS }
     }
 
   } else if (consumeAction('MOVE_BACK')) {
@@ -60,8 +60,8 @@ export function processMovement(state: GameState): void {
       revealAround(state)
       tryPickupItem(run, nx, ny)
       checkDeadEnd(state)
-      if (checkPortalTransit(state, nx, ny)) break
-      run.anim = { type: 'back', prevFacing: prev, startMs: performance.now(), durationMs: MOVE_MS }
+      if (!checkPortalTransit(state, nx, ny))
+        run.anim = { type: 'back', prevFacing: prev, startMs: performance.now(), durationMs: MOVE_MS }
     }
 
   // ── Attack ─────────────────────────────────────────────────────────────────
@@ -95,7 +95,7 @@ function attackFacing(state: GameState): boolean {
   const fy               = run.position.y + dy
 
   // Try facing cell first
-  if (playerAttack(run, fx, fy)) return true
+  if (playerAttack(state, fx, fy)) return true
 
   // No direct hit — check the other 3 adjacent cells in order of priority
   const adjacents: [number, number][] = [
@@ -104,7 +104,7 @@ function attackFacing(state: GameState): boolean {
     [run.position.x - dx,      run.position.y - dy],        // behind
   ]
   for (const [ax, ay] of adjacents) {
-    if (playerAttack(run, ax, ay)) return true
+    if (playerAttack(state, ax, ay)) return true
   }
 
   return false

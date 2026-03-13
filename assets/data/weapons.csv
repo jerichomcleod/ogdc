@@ -1,0 +1,11 @@
+Key,Name,Attack Bonus Min,Attack Bonus Max,Hands,MinLevel,MaxLevel
+dagger,Dagger,1,3,One-handed,1,3
+mace,Mace,2,5,One-handed,3,5
+scimitar,Scimitar,2,6,One-handed,6,8
+longsword,Longsword,3,8,One-handed,8,10
+morningstar,Morningstar,3,7,One-handed,7,9
+battleaxe,Battleaxe,4,9,One-handed,6,10
+quarterstaff,Quarterstaff,2,5,Two-handed,2,4
+hammer,War Hammer,4,9,Two-handed,11,12
+greataxe,Great Axe,5,12,Two-handed,13,15
+halberd,Halberd,5,12,Two-handed,13,15

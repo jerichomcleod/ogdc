@@ -40,8 +40,8 @@ export function revealAround(state: GameState): void {
   const { x, y } = state.run.position
   const floor = FLOORS[state.run.floorId]
   if (!floor) return
-  for (let dy = -1; dy <= 1; dy++) {
-    for (let dx = -1; dx <= 1; dx++) {
+  for (let dy = -2; dy <= 2; dy++) {
+    for (let dx = -2; dx <= 2; dx++) {
       const nx = x + dx
       const ny = y + dy
       if (nx >= 0 && nx < floor.width && ny >= 0 && ny < floor.height) {

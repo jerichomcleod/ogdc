@@ -287,7 +287,7 @@ describe('pushCombatLog', () => {
       hp: 60, maxHp: 60, mapRevealed: [], floorFlags: {}, anim: null,
       enemies: [], items: [], inventory: [], equipment: { weapon: null, armor: null, shield: null }, gold: 0,
       combatLog: [],
-      levelEntryMs: 0, playerActed: false, deadEndMsg: '', deadEndMs: null,
+      levelEntryMs: 0, levelEntryDismissMs: null, playerActed: false, deadEndMsg: '', deadEndMs: null,
       entitiesSpawned: false, corpses: [], lastHitMs: 0,
     }
   }

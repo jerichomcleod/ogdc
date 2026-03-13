@@ -1,0 +1,10 @@
+Key,Name,HP Min,HP Max,Attack Min,Attack Max,Speed,MinLevel,MaxLevel
+crawler,Cave Crawler,4,8,1,3,1,1,8
+shade,Shadow,6,12,2,4,1,2,5
+sentinel,Stone Sentinel,8,16,4,7,2,3,5
+revenant,Revenant,7,14,2,4,1,6,8
+boneguard,Bone Guard,9,16,4,7,2,7,10
+wraith,Wraith,12,18,3,5,1,8,15
+automaton,Automaton,10,18,3,6,2,11,13
+drone,Sentry Drone,14,18,4,7,1,12,14
+behemoth,Behemoth,16,24,6,11,3,14,15

@@ -13,7 +13,7 @@ import { getCtx } from './canvas'
 import { GameState } from '../game/gameState'
 import { getCell } from '../systems/mapSystem'
 import { Direction } from '../content/types'
-import { getWallPixels, getFloorPixels, getCeilPixels, getDoorClosedPixels, getDoorOpenPixels, getStairDownPixels, getStairUpPixels, getEnemySpritePixels, getItemSpritePixels, TexPixels } from './assets'
+import { getWallPixels, getFloorPixels, getCeilPixels, getDoorClosedPixels, getDoorOpenPixels, getStairDownPixels, getStairUpPixels, getPortalPixels, getEnemySpritePixels, getItemSpritePixels, TexPixels } from './assets'
 import { getFloor } from '../content/floors'
 import { getEnemyDef, getItemDef } from '../content/defs'
 import { CANVAS_W, DUNGEON_H, HORIZON_Y } from '../constants'
@@ -401,16 +401,15 @@ export function renderDungeon(state: GameState): void {
   const ENEMY_MOVE_MS = 250
 
   // Build sprite list from enemies + corpses + items + portal on the current floor
-  const floor = getFloor(run.floorId)
   const sprites: Sprite[] = [
-    // Portal — bright electric-blue billboard; scaleH=0.85 with feet anchored at floor level
+    // Portal sprite
     ...(floor?.portalX !== undefined ? [{
       wx: floor.portalX! + 0.5,
       wy: floor.portalY! + 0.5,
-      color: 0xFFE09618 as number,   // RGB(24, 150, 224) packed little-endian
+      color: 0xFFE09618 as number,
       scaleH: 0.85,
-      offY:   0.505 - 0.85 / 2,     // ≈ 0.08 — feet at floor line
-      pixels: undefined,
+      offY:   0.505 - 0.85 / 2,
+      pixels: getPortalPixels(),
     }] : []),
     ...run.enemies.map(e => {
       const rawT   = Math.min(1, (now - e.lastMoveMs) / ENEMY_MOVE_MS)
@@ -436,12 +435,37 @@ export function renderDungeon(state: GameState): void {
         pixels: getEnemySpritePixels(c.defKey, 'dead', 0),
       }
     }),
-    ...run.items.map(it => ({
-      wx: it.x + 0.5, wy: it.y + 0.5,
-      color: (getItemDef(it.defKey)?.color ?? 0xFF00FF00),
-      scaleH: 0.5, offY: 0.30,
-      pixels: getItemSpritePixels(it.defKey),
-    })),
+    // Group items by cell so stacked drops can be spread apart
+    ...((): Sprite[] => {
+      const byCell = new Map<string, number[]>()
+      run.items.forEach((it, i) => {
+        const k = `${it.x},${it.y}`
+        if (!byCell.has(k)) byCell.set(k, [])
+        byCell.get(k)!.push(i)
+      })
+      return run.items.map((it, i) => {
+        const def     = getItemDef(it.defKey)
+        const isGear  = def?.slot === 'weapon' || def?.slot === 'armor' || def?.slot === 'shield' || def?.key === 'gold_coin'
+        // Stable per-item bob variation (phase + speed differ by id)
+        const phase   = (it.id * 2.399) % (Math.PI * 2)   // golden-angle spread
+        const speed   = 480 + (it.id % 7) * 30             // 480–660 ms
+        const bob     = isGear ? Math.sin(performance.now() / speed + phase) * 0.04 : 0
+        // Spread items sharing a cell in a small circle
+        const group   = byCell.get(`${it.x},${it.y}`)!
+        const gIdx    = group.indexOf(i)
+        const gSize   = group.length
+        const radius  = gSize > 1 ? Math.min(0.24, 0.10 * gSize) : 0
+        const angle   = gSize > 1 ? (gIdx / gSize) * Math.PI * 2 : 0
+        return {
+          wx: it.x + 0.5 + Math.cos(angle) * radius,
+          wy: it.y + 0.5 + Math.sin(angle) * radius,
+          color: (def?.color ?? 0xFF00FF00),
+          scaleH: isGear ? (def?.key === 'gold_coin' ? 0.16 : 0.65) : 0.5,
+          offY:   isGear ? 0.13 + bob : 0.30,
+          pixels: getItemSpritePixels(it.defKey),
+        }
+      })
+    })(),
   ]
 
   let posX   = run.position.x + 0.5

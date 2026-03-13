@@ -5,8 +5,9 @@ import { getLevelDescText } from '../engine/assets'
 
 // ── Level entry text ──────────────────────────────────────────────────────────
 
-const ENTRY_DURATION_MS = 2800
+const ENTRY_DURATION_MS = 5000
 const ENTRY_FADE_MS     = 600
+const ENTRY_DISMISS_MS  = 250   // fast fade when player presses a key
 
 function levelLabel(floorId: string): string {
   const LABELS: Record<string, string> = {
@@ -36,8 +37,18 @@ export function renderLevelEntry(state: GameState): void {
     _cachedDesc      = getLevelDescText(state.run.floorId)
   }
 
-  const elapsed = performance.now() - state.run.levelEntryMs
-  if (elapsed >= ENTRY_DURATION_MS) {
+  const elapsed    = performance.now() - state.run.levelEntryMs
+  const dismissMs  = state.run.levelEntryDismissMs
+  const dismissed  = dismissMs !== null
+
+  // If dismissed, fade out over ENTRY_DISMISS_MS; mark shown once fully faded
+  if (dismissed) {
+    const fadeElapsed = performance.now() - dismissMs
+    if (fadeElapsed >= ENTRY_DISMISS_MS) {
+      state.shownLevelEntries.add(state.run.floorId)
+      return
+    }
+  } else if (elapsed >= ENTRY_DURATION_MS) {
     state.shownLevelEntries.add(state.run.floorId)
     return
   }
@@ -45,12 +56,15 @@ export function renderLevelEntry(state: GameState): void {
   const title = levelLabel(state.run.floorId)
   if (!title) return
 
-  const ctx     = getCtx()
+  const ctx      = getCtx()
   const subtitle = _cachedDesc
 
-  // Fade in first 300ms, full alpha until fade point, then fade out
+  // Alpha: fade in (300ms) → hold → fade out (normal: 600ms, dismissed: 250ms)
   let alpha = 1
-  if (elapsed < 300) {
+  if (dismissed) {
+    const fadeElapsed = performance.now() - dismissMs
+    alpha = 1 - fadeElapsed / ENTRY_DISMISS_MS
+  } else if (elapsed < 300) {
     alpha = elapsed / 300
   } else if (elapsed > ENTRY_DURATION_MS - ENTRY_FADE_MS) {
     alpha = (ENTRY_DURATION_MS - elapsed) / ENTRY_FADE_MS

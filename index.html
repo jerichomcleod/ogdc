@@ -194,7 +194,7 @@
     }
     .btn-interact:active, .btn-interact.pressed { background: #102428; color: #60c8d8; }
 
-    /* MENU / INV — muted */
+    /* MENU — muted */
     .btn-aux {
       background: #141210;
       border: 1px solid #2e2618;
@@ -205,6 +205,19 @@
       letter-spacing: 0.04em;
     }
     .btn-aux:active, .btn-aux.pressed { background: #201c12; color: #8a7a54; }
+
+    /* INV — orange */
+    .btn-inv {
+      background: #1e1208;
+      border: 1px solid #7a4a18;
+      border-bottom: 3px solid #5a3210;
+      color: #e8841a;
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-weight: bold;
+    }
+    .btn-inv:active, .btn-inv.pressed { background: #2e1e0c; color: #ffaa44; }
 
     /* ── Combat log ──────────────────────────────────────────── */
     #ctrl-log {
@@ -294,7 +307,7 @@
         <button class="btn btn-use"      data-action="USE_ITEM">⚗ USE</button>
         <button class="btn btn-interact" data-action="INTERACT">✦ OPEN</button>
         <button class="btn btn-aux"      data-action="CANCEL">MENU</button>
-        <button class="btn btn-aux"      data-action="OPEN_INVENTORY">INV</button>
+        <button class="btn btn-inv"      data-action="OPEN_INVENTORY">INV</button>
       </div>
     </div>
 

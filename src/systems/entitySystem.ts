@@ -10,13 +10,12 @@ import { isPassable } from './mapSystem'
 
 let _nextId = 0
 
-function ri(r: () => number, lo: number, hi: number): number {
-  return lo + Math.floor(r() * (hi - lo + 1))
+export function makeItemInstance(defKey: string): ItemInstance {
+  return { id: _nextId++, defKey, x: 0, y: 0 }
 }
 
-function levelDepth(floorId: string): number {
-  const m = floorId.match(/_(\d)$/)
-  return m ? parseInt(m[1]) : 1
+function ri(r: () => number, lo: number, hi: number): number {
+  return lo + Math.floor(r() * (hi - lo + 1))
 }
 
 // ── Placement ─────────────────────────────────────────────────────────────────
@@ -28,9 +27,8 @@ export function generateEntities(floorId: string, worldSeed: number, levelIndex:
   const floor = getFloor(floorId)
   if (!floor) return { enemies: [], items: [] }
 
-  const r     = makeRng((worldSeed ^ (levelIndex * 0x9E37)) >>> 0)
-  const theme = floor.theme
-  const depth = levelDepth(floorId)
+  const r       = makeRng((worldSeed ^ (levelIndex * 0x9E37)) >>> 0)
+  const level   = levelIndex + 1   // 1-based level number
 
   // Collect valid floor cells (not spawn, not exit, not portal), shuffled
   const pool: [number, number][] = []
@@ -53,32 +51,21 @@ export function generateEntities(floorId: string, worldSeed: number, levelIndex:
   const items:   ItemInstance[]  = []
   let   pi = 0
 
-  const eligible = ENEMY_DEFS.filter(d =>
-    d.themes.includes(theme) && depth >= d.depth[0] && depth <= d.depth[1]
-  )
+  const eligible = ENEMY_DEFS.filter(d => level >= d.minLevel && level <= d.maxLevel)
   if (!eligible.length) return { enemies: [], items: [] }
 
-  // Enemies — HP rolled from range using seeded RNG
-  const enemyCount = ri(r, Math.round((3 + depth) * 0.65), Math.round((5 + depth * 2) * 0.65))
+  // Enemies — HP rolled from range, then scaled by (1.08)^levelIndex cumulatively
+  const hpScale    = Math.pow(1.08, levelIndex)
+  const enemyCount = ri(r, 10, 20)
   for (let i = 0; i < enemyCount && pi < pool.length; i++) {
     const [x, y] = pool[pi++]
     const k = `${x},${y}`
     if (used.has(k)) { i--; continue }
     used.add(k)
-    const def = eligible[Math.floor(r() * eligible.length)]
-    const hp  = ri(r, def.hpMin, def.hpMax)
+    const def    = eligible[Math.floor(r() * eligible.length)]
+    const baseHp = ri(r, def.hpMin, def.hpMax)
+    const hp     = Math.max(1, Math.round(baseHp * hpScale))
     enemies.push({ id: _nextId++, defKey: def.key, x, y, fromX: x, fromY: y, hp, maxHp: hp, turnDebt: 0, isAttacking: false, lastMoveMs: 0 })
-  }
-
-  // Items
-  const itemCount = ri(r, 1, 1 + Math.floor(depth / 2))
-  for (let i = 0; i < itemCount && pi < pool.length; i++) {
-    const [x, y] = pool[pi++]
-    const k = `${x},${y}`
-    if (used.has(k)) { i--; continue }
-    used.add(k)
-    const def = ITEM_DEFS[Math.floor(r() * ITEM_DEFS.length)]
-    items.push({ id: _nextId++, defKey: def.key, x, y })
   }
 
   return { enemies, items }
@@ -202,13 +189,75 @@ function dealDamageToPlayer(state: GameState, defKey: string): void {
   }
 }
 
+// ── Weapon drops ──────────────────────────────────────────────────────────────
+
+// Drop rate: 20% at level 1, 8% at level 15, linear
+function gearDropChance(levelIndex: number): number {
+  return 0.20 - 0.12 * Math.min(levelIndex, 14) / 14
+}
+
+function levelPool(slot: 'weapon' | 'armor' | 'shield', levelIndex: number) {
+  const level = levelIndex + 1
+  return ITEM_DEFS.filter(d =>
+    d.slot === slot &&
+    d.minLevel !== undefined && d.maxLevel !== undefined &&
+    level >= d.minLevel && level <= d.maxLevel
+  )
+}
+
+function tryEnemyDrops(run: RunState, x: number, y: number, levelIndex: number): void {
+  const chance = gearDropChance(levelIndex)
+  let dropped  = false
+
+  // Weapon
+  if (Math.random() < chance) {
+    const pool = levelPool('weapon', levelIndex)
+    if (pool.length) {
+      const def = pool[Math.floor(Math.random() * pool.length)]
+      run.items.push({ id: _nextId++, defKey: def.key, x, y })
+      pushCombatLog(run, `A ${def.name} drops.`)
+      dropped = true
+    }
+  }
+
+  // Armor/shield (only if no weapon dropped; suppress slot if player already owns one)
+  if (!dropped && Math.random() < chance) {
+    const hasArmor  = run.equipment.armor  !== null || run.inventory.some(it => getItemDef(it.defKey)?.slot === 'armor')
+    const hasShield = run.equipment.shield !== null || run.inventory.some(it => getItemDef(it.defKey)?.slot === 'shield')
+    const pool = [
+      ...(hasArmor  ? [] : levelPool('armor',  levelIndex)),
+      ...(hasShield ? [] : levelPool('shield', levelIndex)),
+    ]
+    if (pool.length) {
+      const def = pool[Math.floor(Math.random() * pool.length)]
+      run.items.push({ id: _nextId++, defKey: def.key, x, y })
+      pushCombatLog(run, `${def.name} drops.`)
+      dropped = true
+    }
+  }
+
+  // Gold — independent 33% chance
+  if (Math.random() < 0.33) {
+    run.items.push({ id: _nextId++, defKey: 'gold_coin', x, y })
+  }
+
+  // Potion — 20% only if no gear dropped
+  if (!dropped && Math.random() < 0.20) {
+    const potionKey = levelIndex >= 10 && Math.random() < 0.5 ? 'potion_lg' : 'potion_sm'
+    const def = ITEM_DEFS.find(d => d.key === potionKey)!
+    run.items.push({ id: _nextId++, defKey: potionKey, x, y })
+    pushCombatLog(run, `A ${def.name} drops.`)
+  }
+}
+
 // ── Player attack ─────────────────────────────────────────────────────────────
 
 const PLAYER_ATK_BASE_MIN = 1
 const PLAYER_ATK_BASE_MAX = 2
 
 /** Attack the enemy at (tx, ty). Returns true if an attack was made. */
-export function playerAttack(run: RunState, tx: number, ty: number): boolean {
+export function playerAttack(state: GameState, tx: number, ty: number): boolean {
+  const run = state.run
   const idx = run.enemies.findIndex(e => e.x === tx && e.y === ty)
   if (idx === -1) return false
 
@@ -231,6 +280,7 @@ export function playerAttack(run: RunState, tx: number, ty: number): boolean {
     }
     run.corpses.push(corpse)
     pushCombatLog(run, `You kill the ${name}.`)
+    tryEnemyDrops(run, tx, ty, state.levelIndex)
   } else {
     pushCombatLog(run, `You hit the ${name} for ${dmg}. (${enemy.hp}/${enemy.maxHp} HP)`)
   }
@@ -239,31 +289,34 @@ export function playerAttack(run: RunState, tx: number, ty: number): boolean {
 
 // ── Item pickup ───────────────────────────────────────────────────────────────
 
-/** Pick up an item at (x, y). Gold goes to counter; equipment/potions go to inventory. */
+/** Pick up all items at (x, y). Gold goes to counter; equipment/potions go to inventory. */
 export function tryPickupItem(run: RunState, x: number, y: number): boolean {
-  const idx = run.items.findIndex(it => it.x === x && it.y === y)
-  if (idx === -1) return false
+  const atCell = run.items.filter(it => it.x === x && it.y === y)
+  if (!atCell.length) return false
 
-  const item = run.items[idx]
-  const def  = getItemDef(item.defKey)
+  let pickedAny = false
+  for (const item of atCell) {
+    const def = getItemDef(item.defKey)
 
-  // Gold coins auto-collect into the gold counter, never enter inventory
-  if (item.defKey === 'gold_coin') {
-    run.items.splice(idx, 1)
-    run.gold++
-    pushCombatLog(run, 'Found a Gold Coin.')
-    return true
+    if (item.defKey === 'gold_coin') {
+      run.items.splice(run.items.indexOf(item), 1)
+      run.gold++
+      pushCombatLog(run, 'Found a Gold Coin.')
+      pickedAny = true
+      continue
+    }
+
+    if (run.inventory.length >= 36) {
+      pushCombatLog(run, 'Inventory full.')
+      break
+    }
+
+    run.items.splice(run.items.indexOf(item), 1)
+    run.inventory.push(item)
+    pushCombatLog(run, `Picked up ${def?.name ?? 'item'}.`)
+    pickedAny = true
   }
-
-  if (run.inventory.length >= 20) {
-    pushCombatLog(run, 'Inventory full.')
-    return false
-  }
-
-  run.items.splice(idx, 1)
-  run.inventory.push(item)
-  pushCombatLog(run, `Picked up ${def?.name ?? 'item'}.`)
-  return true
+  return pickedAny
 }
 
 /** Use the best healing item in inventory (Q key shortcut). */
@@ -309,7 +362,7 @@ export function equipItemAtSlot(run: RunState, idx: number): boolean {
 
   run.inventory.splice(idx, 1)
   const displaced = run.equipment[def.slot]
-  if (displaced && run.inventory.length < 20) run.inventory.push(displaced)
+  if (displaced && run.inventory.length < 36) run.inventory.push(displaced)
   run.equipment[def.slot] = item
   pushCombatLog(run, `Equipped ${def.name}.`)
   return true
@@ -319,7 +372,7 @@ export function equipItemAtSlot(run: RunState, idx: number): boolean {
 export function unequipSlot(run: RunState, slot: keyof Equipment): boolean {
   const item = run.equipment[slot]
   if (!item) return false
-  if (run.inventory.length >= 20) {
+  if (run.inventory.length >= 36) {
     pushCombatLog(run, 'Inventory full — unequip failed.')
     return false
   }
@@ -330,15 +383,12 @@ export function unequipSlot(run: RunState, slot: keyof Equipment): boolean {
   return true
 }
 
-/** Drop the item at a specific inventory slot onto the floor at the player's position. */
+/** Permanently discard the item at a specific inventory slot. */
 export function dropItemAtSlot(run: RunState, idx: number): boolean {
   const item = run.inventory[idx]
   if (!item) return false
   run.inventory.splice(idx, 1)
-  item.x = run.position.x
-  item.y = run.position.y
-  run.items.push(item)
   const def = getItemDef(item.defKey)
-  pushCombatLog(run, `Dropped ${def?.name ?? 'item'}.`)
+  pushCombatLog(run, `Discarded ${def?.name ?? 'item'}.`)
   return true
 }

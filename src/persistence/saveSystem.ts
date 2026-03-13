@@ -130,7 +130,8 @@ function deserialize(data: SaveFile, state: GameState): void {
     deadEndMsg:      '',
     deadEndMs:       null,
     entitiesSpawned: r.entitiesSpawned,
-    lastHitMs:       0,
+    lastHitMs:           0,
+    levelEntryDismissMs: null,
   }
   state.run = run
 }

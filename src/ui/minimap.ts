@@ -1,6 +1,5 @@
 import { GameState } from '../game/gameState'
 import { getFloor } from '../content/floors'
-import { LEVEL_SEQUENCE } from '../content/floors'
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -121,14 +120,4 @@ export function renderMinimap(state: GameState): void {
   ctx.closePath()
   ctx.fill()
 
-  // Level label on canvas bottom-left
-  const lvl = LEVEL_SEQUENCE.indexOf(run.floorId as typeof LEVEL_SEQUENCE[number]) + 1
-  const label = `Level ${lvl}`
-  ctx.font = 'bold 10px monospace'
-  ctx.textAlign = 'left'
-  const lw = ctx.measureText(label).width
-  ctx.fillStyle = 'rgba(0,0,0,0.55)'
-  ctx.fillRect(2, MAP_H - 14, lw + 8, 13)
-  ctx.fillStyle = '#8b7355'
-  ctx.fillText(label, 6, MAP_H - 4)
 }

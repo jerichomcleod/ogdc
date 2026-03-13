@@ -80,7 +80,7 @@ function buildGraph(r: () => number): DunGraph {
   }
 
   // ── 1. Main path ─────────────────────────────────────────────────────────
-  const pathLen = ri(r, 14, 28)
+  const pathLen = ri(r, 17, 34)
   const mainPath: number[] = []
   for (let i = 0; i < pathLen; i++) {
     const role: NodeRole = i === 0 ? 'start' : i === pathLen - 1 ? 'end' : 'normal'

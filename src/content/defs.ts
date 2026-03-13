@@ -14,8 +14,8 @@ export interface EnemyDef {
   attackMin: number
   attackMax: number
   speed:     number          // acts every N player turns
-  themes:    string[]
-  depth:     [number, number] // min/max floor depth within its theme (1–5)
+  minLevel:  number          // first level (1-based) this enemy can appear
+  maxLevel:  number          // last level (1-based) this enemy can appear
 }
 
 export type EquipSlot = 'weapon' | 'armor' | 'shield'
@@ -30,23 +30,23 @@ export interface ItemDef {
   attackMin?: number      // weapon attack bonus min
   attackMax?: number      // weapon attack bonus max
   defense?:   number      // armor/shield defense bonus
+  twoHanded?: boolean     // future: prevents shield equip
+  minLevel?:  number      // earliest level this weapon drops (1-based)
+  maxLevel?:  number      // latest level this weapon drops (1-based)
 }
 
 // ── Enemy roster ─────────────────────────────────────────────────────────────
 
 export const ENEMY_DEFS: EnemyDef[] = [
-  // Stone
-  { key: 'crawler',   name: 'Cave Crawler',   color: col( 50, 110,  55), hpMin:  4, hpMax:  8, attackMin: 1, attackMax: 3, speed: 1, themes: ['stone', 'catacomb'], depth: [1, 3] },
-  { key: 'shade',     name: 'Shadow',         color: col(110,  55, 140), hpMin:  6, hpMax: 12, attackMin: 2, attackMax: 4, speed: 1, themes: ['stone'],             depth: [2, 5] },
-  { key: 'sentinel',  name: 'Stone Sentinel', color: col(120, 125, 165), hpMin: 14, hpMax: 22, attackMin: 4, attackMax: 7, speed: 2, themes: ['stone'],             depth: [3, 5] },
-  // Catacomb
-  { key: 'revenant',  name: 'Revenant',       color: col(200, 190, 110), hpMin:  7, hpMax: 13, attackMin: 2, attackMax: 4, speed: 1, themes: ['catacomb'],          depth: [1, 3] },
-  { key: 'boneguard', name: 'Bone Guard',      color: col(225, 218, 198), hpMin: 16, hpMax: 24, attackMin: 4, attackMax: 7, speed: 2, themes: ['catacomb'],          depth: [2, 5] },
-  { key: 'wraith',    name: 'Wraith',          color: col( 70, 185, 185), hpMin:  5, hpMax:  9, attackMin: 3, attackMax: 5, speed: 1, themes: ['catacomb', 'machine'], depth: [3, 5] },
-  // Machine
-  { key: 'automaton', name: 'Automaton',       color: col(205, 130,  38), hpMin: 10, hpMax: 18, attackMin: 3, attackMax: 6, speed: 2, themes: ['machine'],           depth: [1, 3] },
-  { key: 'drone',     name: 'Sentry Drone',    color: col(225,  75,  28), hpMin:  6, hpMax: 10, attackMin: 4, attackMax: 7, speed: 1, themes: ['machine'],           depth: [2, 4] },
-  { key: 'behemoth',  name: 'Behemoth',        color: col(145,  38,  18), hpMin: 24, hpMax: 40, attackMin: 6, attackMax: 11, speed: 3, themes: ['machine'],          depth: [4, 5] },
+  { key: 'crawler',   name: 'Cave Crawler',   color: col( 50, 110,  55), hpMin:  4, hpMax:  8, attackMin: 1, attackMax:  3, speed: 1, minLevel:  1, maxLevel:  8 },
+  { key: 'shade',     name: 'Shadow',         color: col(110,  55, 140), hpMin:  6, hpMax: 12, attackMin: 2, attackMax:  4, speed: 1, minLevel:  2, maxLevel:  5 },
+  { key: 'sentinel',  name: 'Stone Sentinel', color: col(120, 125, 165), hpMin:  8, hpMax: 16, attackMin: 4, attackMax:  7, speed: 2, minLevel:  3, maxLevel:  5 },
+  { key: 'revenant',  name: 'Revenant',       color: col(200, 190, 110), hpMin:  7, hpMax: 14, attackMin: 2, attackMax:  4, speed: 1, minLevel:  6, maxLevel:  8 },
+  { key: 'boneguard', name: 'Bone Guard',     color: col(225, 218, 198), hpMin:  9, hpMax: 16, attackMin: 4, attackMax:  7, speed: 2, minLevel:  7, maxLevel: 10 },
+  { key: 'wraith',    name: 'Wraith',         color: col( 70, 185, 185), hpMin: 12, hpMax: 18, attackMin: 3, attackMax:  5, speed: 1, minLevel:  8, maxLevel: 15 },
+  { key: 'automaton', name: 'Automaton',      color: col(205, 130,  38), hpMin: 10, hpMax: 18, attackMin: 3, attackMax:  6, speed: 2, minLevel: 11, maxLevel: 13 },
+  { key: 'drone',     name: 'Sentry Drone',   color: col(225,  75,  28), hpMin: 14, hpMax: 18, attackMin: 4, attackMax:  7, speed: 1, minLevel: 12, maxLevel: 14 },
+  { key: 'behemoth',  name: 'Behemoth',       color: col(145,  38,  18), hpMin: 16, hpMax: 24, attackMin: 6, attackMax: 11, speed: 3, minLevel: 14, maxLevel: 15 },
 ]
 
 // ── Item roster ───────────────────────────────────────────────────────────────
@@ -57,18 +57,25 @@ export const ITEM_DEFS: ItemDef[] = [
   { key: 'potion_lg',     name: 'Healing Potion',  color: col(225,  85,  85), effect: 'heal', value: 35 },
   // Gold
   { key: 'gold_coin',     name: 'Gold Coin',        color: col(220, 180,  30), effect: 'heal', value: 0 },
-  // Weapons
-  { key: 'dagger',        name: 'Rusty Dagger',     color: col(160, 155, 140), effect: 'equip', slot: 'weapon', attackMin: 1, attackMax: 3 },
-  { key: 'short_sword',   name: 'Short Sword',      color: col(180, 180, 195), effect: 'equip', slot: 'weapon', attackMin: 2, attackMax: 5 },
-  { key: 'longsword',     name: 'Longsword',        color: col(200, 200, 215), effect: 'equip', slot: 'weapon', attackMin: 3, attackMax: 8 },
-  { key: 'great_blade',   name: 'Great Blade',      color: col(120, 120, 145), effect: 'equip', slot: 'weapon', attackMin: 5, attackMax: 12 },
+  // Weapons — one-handed
+  { key: 'dagger',       name: 'Dagger',      color: col(160, 155, 140), effect: 'equip', slot: 'weapon', attackMin: 1, attackMax:  3, minLevel:  1, maxLevel:  3 },
+  { key: 'mace',         name: 'Mace',        color: col(170, 155, 120), effect: 'equip', slot: 'weapon', attackMin: 2, attackMax:  5, minLevel:  3, maxLevel:  5 },
+  { key: 'scimitar',     name: 'Scimitar',    color: col(190, 185, 155), effect: 'equip', slot: 'weapon', attackMin: 2, attackMax:  6, minLevel:  6, maxLevel:  8 },
+  { key: 'longsword',    name: 'Longsword',   color: col(200, 200, 215), effect: 'equip', slot: 'weapon', attackMin: 3, attackMax:  8, minLevel:  8, maxLevel: 10 },
+  { key: 'morningstar',  name: 'Morningstar', color: col(175, 150, 110), effect: 'equip', slot: 'weapon', attackMin: 3, attackMax:  7, minLevel:  7, maxLevel:  9 },
+  { key: 'battleaxe',   name: 'Battleaxe',   color: col(180, 160, 120), effect: 'equip', slot: 'weapon', attackMin: 4, attackMax:  9, minLevel:  6, maxLevel: 10 },
+  // Weapons — two-handed (future: blocks shield slot)
+  { key: 'quarterstaff', name: 'Quarterstaff', color: col(140, 110, 70), effect: 'equip', slot: 'weapon', attackMin: 2, attackMax:  5, twoHanded: true, minLevel:  2, maxLevel:  4 },
+  { key: 'hammer',       name: 'War Hammer',   color: col(165, 145, 100), effect: 'equip', slot: 'weapon', attackMin: 4, attackMax:  9, twoHanded: true, minLevel: 11, maxLevel: 12 },
+  { key: 'greataxe',    name: 'Great Axe',    color: col(155, 130,  90), effect: 'equip', slot: 'weapon', attackMin: 5, attackMax: 12, twoHanded: true, minLevel: 13, maxLevel: 15 },
+  { key: 'halberd',     name: 'Halberd',      color: col(145, 125,  85), effect: 'equip', slot: 'weapon', attackMin: 5, attackMax: 12, twoHanded: true, minLevel: 13, maxLevel: 15 },
   // Armor
-  { key: 'leather_armor', name: 'Leather Armor',    color: col(140, 100,  55), effect: 'equip', slot: 'armor',  defense: 1 },
-  { key: 'chain_mail',    name: 'Chainmail',        color: col(160, 165, 175), effect: 'equip', slot: 'armor',  defense: 3 },
-  { key: 'plate_armor',   name: 'Plate Armor',      color: col(190, 195, 205), effect: 'equip', slot: 'armor',  defense: 5 },
+  { key: 'leather_armor', name: 'Leather Armor', color: col(140, 100,  55), effect: 'equip', slot: 'armor',  defense: 1, minLevel:  1, maxLevel:  7 },
+  { key: 'chain_mail',    name: 'Chainmail',     color: col(160, 165, 175), effect: 'equip', slot: 'armor',  defense: 3, minLevel:  5, maxLevel: 12 },
+  { key: 'plate_armor',   name: 'Plate Armor',   color: col(190, 195, 205), effect: 'equip', slot: 'armor',  defense: 5, minLevel: 10, maxLevel: 15 },
   // Shields
-  { key: 'wooden_shield', name: 'Wooden Shield',    color: col(130,  95,  50), effect: 'equip', slot: 'shield', defense: 1 },
-  { key: 'iron_shield',   name: 'Iron Shield',      color: col(155, 160, 170), effect: 'equip', slot: 'shield', defense: 2 },
+  { key: 'wooden_shield', name: 'Wooden Shield', color: col(130,  95,  50), effect: 'equip', slot: 'shield', defense: 1, minLevel:  1, maxLevel:  8 },
+  { key: 'iron_shield',   name: 'Iron Shield',   color: col(155, 160, 170), effect: 'equip', slot: 'shield', defense: 2, minLevel:  6, maxLevel: 15 },
 ]
 
 export function getEnemyDef(key: string): EnemyDef | undefined {

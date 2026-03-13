@@ -79,6 +79,7 @@ function makeRunState(overrides: Partial<RunState> = {}): RunState {
     gold: 0,
     combatLog: [],
     levelEntryMs: 0,
+    levelEntryDismissMs: null,
     playerActed: false,
     deadEndMsg: '',
     deadEndMs: null,
@@ -119,10 +120,10 @@ describe('generateEntities', () => {
     expect(enemies.length).toBeGreaterThan(0)
   })
 
-  it('returns items array for stone_1', () => {
+  it('returns empty items array from generation (items come from drops only)', () => {
     const { items } = generateEntities('stone_1', 42, 0)
     expect(Array.isArray(items)).toBe(true)
-    expect(items.length).toBeGreaterThanOrEqual(1)
+    expect(items.length).toBe(0)
   })
 
   it('no enemy spawns at spawn position (1,1)', () => {
@@ -188,54 +189,54 @@ describe('generateEntities', () => {
 
 describe('playerAttack', () => {
   it('returns false when no enemy at target', () => {
-    const run = makeRunState()
-    expect(playerAttack(run, 2, 2)).toBe(false)
+    const state = makeGameState()
+    expect(playerAttack(state, 2, 2)).toBe(false)
   })
 
   it('returns true and reduces enemy HP', () => {
     const enemy: EnemyInstance = { id: 1, defKey: 'crawler', x: 2, y: 2, hp: 10, maxHp: 10, turnDebt: 0, isAttacking: false, fromX: 0, fromY: 0, lastMoveMs: 0 }
-    const run = makeRunState({ enemies: [enemy] })
-    const result = playerAttack(run, 2, 2)
+    const state = makeGameState({ enemies: [enemy] })
+    const result = playerAttack(state, 2, 2)
     expect(result).toBe(true)
     expect(enemy.hp).toBeLessThan(10)
   })
 
   it('removes enemy from list on kill', () => {
     const enemy: EnemyInstance = { id: 1, defKey: 'crawler', x: 2, y: 2, hp: 1, maxHp: 6, turnDebt: 0, isAttacking: false, fromX: 0, fromY: 0, lastMoveMs: 0 }
-    const run = makeRunState({ enemies: [enemy] })
-    playerAttack(run, 2, 2)
-    expect(run.enemies).toHaveLength(0)
+    const state = makeGameState({ enemies: [enemy] })
+    playerAttack(state, 2, 2)
+    expect(state.run.enemies).toHaveLength(0)
   })
 
   it('logs a message on kill', () => {
     const enemy: EnemyInstance = { id: 1, defKey: 'crawler', x: 2, y: 2, hp: 1, maxHp: 6, turnDebt: 0, isAttacking: false, fromX: 0, fromY: 0, lastMoveMs: 0 }
-    const run = makeRunState({ enemies: [enemy] })
-    playerAttack(run, 2, 2)
-    expect(run.combatLog.some(m => m.includes('kill') || m.includes('kill'))).toBe(true)
+    const state = makeGameState({ enemies: [enemy] })
+    playerAttack(state, 2, 2)
+    expect(state.run.combatLog.some(m => m.includes('kill'))).toBe(true)
   })
 
   it('logs a message on hit (not kill)', () => {
     const enemy: EnemyInstance = { id: 1, defKey: 'crawler', x: 2, y: 2, hp: 100, maxHp: 100, turnDebt: 0, isAttacking: false, fromX: 0, fromY: 0, lastMoveMs: 0 }
-    const run = makeRunState({ enemies: [enemy] })
-    playerAttack(run, 2, 2)
-    expect(run.combatLog.length).toBeGreaterThan(0)
+    const state = makeGameState({ enemies: [enemy] })
+    playerAttack(state, 2, 2)
+    expect(state.run.combatLog.length).toBeGreaterThan(0)
   })
 
   it('combat log never exceeds 4 entries', () => {
-    const run = makeRunState()
+    const state = makeGameState()
     for (let i = 0; i < 10; i++) {
       const enemy: EnemyInstance = { id: i, defKey: 'crawler', x: 2, y: 2, hp: 1, maxHp: 6, turnDebt: 0, isAttacking: false, fromX: 0, fromY: 0, lastMoveMs: 0 }
-      run.enemies.push(enemy)
-      playerAttack(run, 2, 2)
+      state.run.enemies.push(enemy)
+      playerAttack(state, 2, 2)
     }
-    expect(run.combatLog.length).toBeLessThanOrEqual(4)
+    expect(state.run.combatLog.length).toBeLessThanOrEqual(4)
   })
 
   it('does not affect enemies at other positions', () => {
     const e1: EnemyInstance = { id: 1, defKey: 'crawler', x: 2, y: 2, hp: 10, maxHp: 10, turnDebt: 0, isAttacking: false, fromX: 0, fromY: 0, lastMoveMs: 0 }
     const e2: EnemyInstance = { id: 2, defKey: 'crawler', x: 3, y: 3, hp: 10, maxHp: 10, turnDebt: 0, isAttacking: false, fromX: 0, fromY: 0, lastMoveMs: 0 }
-    const run = makeRunState({ enemies: [e1, e2] })
-    playerAttack(run, 2, 2)
+    const state = makeGameState({ enemies: [e1, e2] })
+    playerAttack(state, 2, 2)
     expect(e2.hp).toBe(10)
   })
 })

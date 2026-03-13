@@ -1,12 +1,12 @@
-import { GameState, makeInitialState, returnToDungeon, returnToPortal, goToLevel } from './gameState'
+import { GameState, makeInitialState, returnToDungeon, returnToPortal, goToLevel, pushCombatLog } from './gameState'
 import { clear } from '../engine/canvas'
-import { consumeAction, flushInput, openCheatConsole, isCheatConsoleActive, getCheatConsoleBuffer, consumeCheatSubmit } from '../engine/input'
+import { consumeAction, flushInput, openCheatConsole, isCheatConsoleActive, getCheatConsoleBuffer, consumeCheatSubmit, hasAnyAction } from '../engine/input'
 import { processMovement } from '../systems/movementSystem'
-import { processEnemyTurns, generateEntities } from '../systems/entitySystem'
+import { processEnemyTurns, generateEntities, makeItemInstance } from '../systems/entitySystem'
 import { renderDungeon } from '../engine/renderer'
 import { renderMinimap } from '../ui/minimap'
 import { renderLevelEntry, renderGameOver, renderCombatLog, renderHpOverlay, renderDeadEnd, renderCheatConsole } from '../ui/overlays'
-import { renderTown, townMenuItemCount, getTownMenuAction, handleTownSaveAction } from '../ui/town'
+import { renderTown, townMenuItemCount, getTownMenuAction, handleTownSaveAction, triggerRestEffect, isShopOpen, openShop, closeShop, shopNav, shopConfirm, openShopMenu, closeShopMenu } from '../ui/town'
 import { renderInventory, updateInventory } from '../ui/inventory'
 import { loadGame } from '../persistence/saveSystem'
 
@@ -24,6 +24,15 @@ export function startLoop(state: GameState): void {
 function update(state: GameState): void {
   switch (state.mode) {
     case 'dungeon':
+      // Dismiss level-entry splash on any keypress (before consuming the action)
+      if (
+        state.run.levelEntryDismissMs === null &&
+        !state.shownLevelEntries.has(state.run.floorId) &&
+        hasAnyAction()
+      ) {
+        state.run.levelEntryDismissMs = performance.now()
+      }
+
       // Inventory takes priority — intercepts all input while open
       if (state.inventoryOpen) {
         updateInventory(state)
@@ -82,7 +91,7 @@ function update(state: GameState): void {
       if (consumeAction('MOVE_BACK') || consumeAction('TURN_RIGHT')) {
         state.gameOverMenuIndex = Math.min(1, state.gameOverMenuIndex + 1)
       }
-      if (consumeAction('CONFIRM') || consumeAction('INTERACT')) {
+      if (consumeAction('CONFIRM') || consumeAction('INTERACT') || consumeAction('ATTACK')) {
         if (state.gameOverMenuIndex === 0) {
           flushInput()
           const fresh = makeInitialState()
@@ -106,20 +115,70 @@ function update(state: GameState): void {
 }
 
 function updateTown(state: GameState): void {
+  // Shop overlay intercepts all input while open
+  if (isShopOpen()) {
+    if (consumeAction('MOVE_FORWARD') || consumeAction('TURN_LEFT'))  shopNav(-1, state.run)
+    if (consumeAction('MOVE_BACK')    || consumeAction('TURN_RIGHT')) shopNav(1,  state.run)
+    if (consumeAction('CONFIRM') || consumeAction('INTERACT') || consumeAction('ATTACK')) shopConfirm(state.run)
+    if (consumeAction('CANCEL')) closeShop()
+    return
+  }
+
+  // Esc navigates back through shop layers
+  if (consumeAction('CANCEL')) {
+    closeShopMenu()
+    state.townMenuIndex = 0
+    return
+  }
+
   if (consumeAction('MOVE_FORWARD') || consumeAction('TURN_LEFT')) {
     state.townMenuIndex = Math.max(0, state.townMenuIndex - 1)
   }
   if (consumeAction('MOVE_BACK') || consumeAction('TURN_RIGHT')) {
     state.townMenuIndex = Math.min(townMenuItemCount(state) - 1, state.townMenuIndex + 1)
   }
-  if (consumeAction('INTERACT') || consumeAction('CONFIRM')) {
+  if (consumeAction('INTERACT') || consumeAction('CONFIRM') || consumeAction('ATTACK')) {
     const action = getTownMenuAction(state, state.townMenuIndex)
     if (action === 'dungeon') {
+      closeShopMenu()
       returnToDungeon(state)
       spawnEntitiesForFloor(state)
     } else if (action === 'rest') {
+      const healed = state.run.maxHp - state.run.hp
       state.run.hp = state.run.maxHp
-      state.run.combatLog = ['You feel restored.']
+      const msg = healed > 0
+        ? `Rested. +${healed} HP restored. (${state.run.maxHp}/${state.run.maxHp})`
+        : 'You rest, but are already at full health.'
+      state.run.combatLog = [msg]
+      triggerRestEffect(healed)
+    } else if (action === 'shop') {
+      openShopMenu()
+      state.townMenuIndex = 0
+    } else if (action === 'shop_back') {
+      closeShopMenu()
+      state.townMenuIndex = 0
+    } else if (action === 'sell') {
+      openShop()
+    } else if (action === 'buy_potion_sm') {
+      if (state.run.gold < 20) {
+        pushCombatLog(state.run, 'Not enough gold. (need 20g)')
+      } else if (state.run.inventory.length >= 36) {
+        pushCombatLog(state.run, 'Inventory full.')
+      } else {
+        state.run.gold -= 20
+        state.run.inventory.push(makeItemInstance('potion_sm'))
+        pushCombatLog(state.run, 'Bought a Healing Draught.')
+      }
+    } else if (action === 'buy_potion_lg') {
+      if (state.run.gold < 50) {
+        pushCombatLog(state.run, 'Not enough gold. (need 50g)')
+      } else if (state.run.inventory.length >= 36) {
+        pushCombatLog(state.run, 'Inventory full.')
+      } else {
+        state.run.gold -= 50
+        state.run.inventory.push(makeItemInstance('potion_lg'))
+        pushCombatLog(state.run, 'Bought a Healing Potion.')
+      }
     } else if (action.startsWith('portal:')) {
       const floorId = action.slice(7)
       returnToPortal(state, floorId)
@@ -187,7 +246,15 @@ function spawnEntitiesForFloor(state: GameState): void {
 }
 
 function processCheat(text: string, state: GameState): void {
-  const m = text.trim().match(/^showmetheway\s+(\d+)$/)
+  const cmd = text.trim()
+
+  if (cmd === 'helpmedaddy') {
+    state.run.hp = state.run.maxHp
+    pushCombatLog(state.run, 'Full heal.')
+    return
+  }
+
+  const m = cmd.match(/^showmetheway\s+(\d+)$/)
   if (m) {
     const level = parseInt(m[1], 10)
     if (level >= 1 && level <= 15) {

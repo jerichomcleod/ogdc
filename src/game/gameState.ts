@@ -28,7 +28,8 @@ export interface RunState {
   equipment:    Equipment         // equipped weapon / armor / shield
   gold:         number            // gold coins collected
   combatLog:    string[]          // last 4 events, newest last
-  levelEntryMs: number            // performance.now() when floor was entered
+  levelEntryMs:     number         // performance.now() when floor was entered
+  levelEntryDismissMs: number | null  // set when player keypress dismisses the splash
   playerActed:      boolean
   deadEndMsg:       string
   deadEndMs:        number | null
@@ -90,12 +91,13 @@ function makeRunState(
     equipment:    carry.equipment,
     gold:         carry.gold,
     combatLog:    [],
-    levelEntryMs: performance.now(),
-    playerActed:      false,
-    deadEndMsg:       '',
-    deadEndMs:        null,
-    entitiesSpawned:  false,
-    lastHitMs:        0,
+    levelEntryMs:        performance.now(),
+    levelEntryDismissMs: null,
+    playerActed:         false,
+    deadEndMsg:          '',
+    deadEndMs:           null,
+    entitiesSpawned:     false,
+    lastHitMs:           0,
   }
 }
 
@@ -172,12 +174,13 @@ export function goUp(state: GameState): void {
     equipment:    carry.equipment,
     gold:         carry.gold,
     combatLog:    [],
-    levelEntryMs: performance.now(),
-    playerActed:      false,
-    deadEndMsg:       '',
-    deadEndMs:        null,
-    entitiesSpawned:  false,
-    lastHitMs:        0,
+    levelEntryMs:        performance.now(),
+    levelEntryDismissMs: null,
+    playerActed:         false,
+    deadEndMsg:          '',
+    deadEndMs:           null,
+    entitiesSpawned:     false,
+    lastHitMs:           0,
   }
 }
 
@@ -214,12 +217,13 @@ export function returnToPortal(state: GameState, floorId: string): void {
     equipment:    carry.equipment,
     gold:         carry.gold,
     combatLog:    [],
-    levelEntryMs: performance.now(),
-    playerActed:      false,
-    deadEndMsg:       '',
-    deadEndMs:        null,
-    entitiesSpawned:  false,
-    lastHitMs:        0,
+    levelEntryMs:        performance.now(),
+    levelEntryDismissMs: null,
+    playerActed:         false,
+    deadEndMsg:          '',
+    deadEndMs:           null,
+    entitiesSpawned:     false,
+    lastHitMs:           0,
   }
 }
 

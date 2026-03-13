@@ -18,6 +18,7 @@ const DOOR_OPEN_PATHS   = ['door_opened_1.png','door_opened_2.png','door_open_3.
   .map(f => `${BASE}doors_small/${f}`)
 const STAIR_DOWN_PATH   = `${BASE}world_small/stair_down.png`
 const STAIR_UP_PATH     = `${BASE}world_small/stair_up.png`
+const PORTAL_PATH       = `${BASE}world_small/portal.png`
 
 // ── Enemy sprite paths ────────────────────────────────────────────────────────
 // Organised as: ENEMY_SPRITE_PATHS[defKey][phase][frameIdx]
@@ -76,6 +77,32 @@ const ENEMY_SPRITE_PATHS: Record<string, Record<string, string[]>> = {
 const ITEM_SPRITE_PATHS: Record<string, string> = {
   potion_sm: `${BASE}items_small/potion_small.png`,
   potion_lg: `${BASE}items_small/potion_large.png`,
+  gold_coin:  `${BASE}items/gold_coin.png`,
+}
+
+// ── Armor sprite paths ────────────────────────────────────────────────────────
+const A = `${BASE}armor_small/`
+const ARMOR_SPRITE_PATHS: Record<string, string> = {
+  leather_armor:  `${A}leather_armor.png`,
+  chain_mail:     `${A}chainmail_armor.png`,
+  plate_armor:    `${A}plate_armor.png`,
+  wooden_shield:  `${A}wooden_shield.png`,
+  iron_shield:    `${A}metal_shield.png`,
+}
+
+// ── Weapon sprite paths (_1 = upright, used for world drops) ─────────────────
+const W = `${BASE}weapons_small/`
+const WEAPON_SPRITE_PATHS: Record<string, string> = {
+  dagger:       `${W}dagger_1.png`,
+  mace:         `${W}mace_1.png`,
+  scimitar:     `${W}scimitar_1.png`,
+  longsword:    `${W}longsword_1.png`,
+  morningstar:  `${W}morningstar_1.png`,
+  battleaxe:    `${W}battleaxe_1.png`,
+  quarterstaff: `${W}quarterstaff_1.png`,
+  hammer:       `${W}hammer_1.png`,
+  greataxe:     `${W}greataxe_1.png`,
+  halberd:      `${W}halberd_1.png`,
 }
 
 
@@ -136,9 +163,11 @@ export async function preloadAssets(): Promise<void> {
     ...STONE_PATH, ...CATACOMB_PATH, ...MACHINE_PATH,
     ...FLOOR_PATHS, ...CEIL_PATHS,
     ...DOOR_CLOSED_PATHS, ...DOOR_OPEN_PATHS,
-    STAIR_DOWN_PATH, STAIR_UP_PATH,
+    STAIR_DOWN_PATH, STAIR_UP_PATH, PORTAL_PATH,
     ...enemySpritePaths,
     ...Object.values(ITEM_SPRITE_PATHS),
+    ...Object.values(ARMOR_SPRITE_PATHS),
+    ...Object.values(WEAPON_SPRITE_PATHS),
   ]
   const imgs = await Promise.all(all.map(loadImage))
 
@@ -264,6 +293,9 @@ export function getStairDownPixels(): TexPixels | undefined {
 export function getStairUpPixels(): TexPixels | undefined {
   return pixelCache.get(cache.get(STAIR_UP_PATH)?.src ?? '')
 }
+export function getPortalPixels(): TexPixels | undefined {
+  return pixelCache.get(cache.get(PORTAL_PATH)?.src ?? '')
+}
 
 /**
  * Get pixel data for an enemy sprite.
@@ -281,9 +313,15 @@ export function getEnemySpritePixels(
 }
 
 export function getItemSpritePixels(defKey: string): TexPixels | undefined {
-  const path = ITEM_SPRITE_PATHS[defKey]
+  const path = ITEM_SPRITE_PATHS[defKey] ?? ARMOR_SPRITE_PATHS[defKey] ?? WEAPON_SPRITE_PATHS[defKey]
   if (!path) return undefined
   return pixelCache.get(cache.get(path)?.src ?? '')
+}
+
+export function getItemImage(defKey: string): HTMLImageElement | undefined {
+  const path = ITEM_SPRITE_PATHS[defKey] ?? ARMOR_SPRITE_PATHS[defKey] ?? WEAPON_SPRITE_PATHS[defKey]
+  if (!path) return undefined
+  return cache.get(path)
 }
 
 export function getDeadEndText(theme: string): string {

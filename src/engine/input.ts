@@ -107,3 +107,8 @@ export function consumeAction(action: Action): boolean {
 export function flushInput(): void {
   _queue.clear()
 }
+
+/** Returns true if any action is pending, without consuming it. */
+export function hasAnyAction(): boolean {
+  return _queue.size > 0
+}

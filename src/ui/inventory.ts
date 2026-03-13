@@ -21,7 +21,13 @@ import { GameState } from '../game/gameState'
 import { consumeAction } from '../engine/input'
 import { getItemDef, Equipment } from '../content/defs'
 import { equipItemAtSlot, useItemAtSlot, dropItemAtSlot, unequipSlot } from '../systems/entitySystem'
+import { getItemImage } from '../engine/assets'
 import { CANVAS_W, CANVAS_H } from '../constants'
+
+// ── Drop confirmation state (module-level; reset on close) ────────────────────
+let _confirmDrop     = false
+let _confirmDropSlot = -1
+let _confirmOpt      = 1   // 0 = Yes (drop), 1 = No (keep) — default to safe option
 
 // ── Layout constants ──────────────────────────────────────────────────────────
 
@@ -35,7 +41,7 @@ const EQUIP_W   = 150
 const EQUIP_SH  = 44     // slot height
 
 const GRID_X    = EQUIP_X + EQUIP_W + 20
-const GRID_COLS = 5
+const GRID_COLS = 9
 const GRID_ROWS = 4
 const SLOT_SZ   = 38     // slot size (px)
 const SLOT_GAP  = 4
@@ -48,9 +54,29 @@ const EQUIP_LABELS = ['Weapon', 'Armor', 'Shield']
 export function updateInventory(state: GameState): void {
   const run = state.run
 
+  // ── Drop confirmation dialog intercepts all input ─────────────────────────
+  if (_confirmDrop) {
+    if (consumeAction('MOVE_FORWARD') || consumeAction('TURN_LEFT') ||
+        consumeAction('MOVE_BACK')    || consumeAction('TURN_RIGHT')) {
+      _confirmOpt = _confirmOpt === 0 ? 1 : 0
+    }
+    if (consumeAction('CONFIRM') || consumeAction('ATTACK') || consumeAction('INTERACT')) {
+      if (_confirmOpt === 0) {
+        dropItemAtSlot(run, _confirmDropSlot)
+        state.inventorySlot = Math.min(_confirmDropSlot, Math.max(0, run.inventory.length - 1))
+      }
+      _confirmDrop = false
+    }
+    if (consumeAction('CANCEL')) {
+      _confirmDrop = false
+    }
+    return
+  }
+
   // Close
   if (consumeAction('CANCEL') || consumeAction('OPEN_INVENTORY')) {
-    state.inventoryOpen  = false
+    state.inventoryOpen = false
+    _confirmDrop        = false
     return
   }
 
@@ -70,14 +96,13 @@ export function updateInventory(state: GameState): void {
       if (col > 0) {
         state.inventorySlot--
       } else {
-        // Switch to equip panel — pick the row-aligned slot
         state.inventoryFocus = 'equip'
         state.inventorySlot  = Math.min(row, EQUIP_SLOTS.length - 1)
       }
     }
 
-    // Actions on carry slot
-    if (consumeAction('CONFIRM') || consumeAction('INTERACT')) {
+    // Equip / use — CONFIRM, INTERACT, or ATTACK
+    if (consumeAction('CONFIRM') || consumeAction('INTERACT') || consumeAction('ATTACK')) {
       const item = run.inventory[state.inventorySlot]
       if (item) {
         const def = getItemDef(item.defKey)
@@ -90,10 +115,12 @@ export function updateInventory(state: GameState): void {
       }
     }
 
-    if (consumeAction('DROP_ITEM')) {
+    // Drop — USE_ITEM (Q) or DROP_ITEM (X) opens confirmation dialog
+    if (consumeAction('USE_ITEM') || consumeAction('DROP_ITEM')) {
       if (run.inventory[state.inventorySlot]) {
-        dropItemAtSlot(run, state.inventorySlot)
-        state.inventorySlot = Math.min(state.inventorySlot, Math.max(0, run.inventory.length - 1))
+        _confirmDrop     = true
+        _confirmDropSlot = state.inventorySlot
+        _confirmOpt      = 1   // default: No (keep)
       }
     }
 
@@ -106,12 +133,10 @@ export function updateInventory(state: GameState): void {
     } else if (consumeAction('TURN_RIGHT')) {
       state.inventoryFocus = 'grid'
       state.inventorySlot  = 0
-    } else if (consumeAction('TURN_LEFT')) {
-      // already at leftmost — no-op
     }
 
-    // Unequip selected slot back to carry
-    if (consumeAction('CONFIRM') || consumeAction('INTERACT')) {
+    // Unequip — CONFIRM, INTERACT, or ATTACK
+    if (consumeAction('CONFIRM') || consumeAction('INTERACT') || consumeAction('ATTACK')) {
       const slot = EQUIP_SLOTS[state.inventorySlot]
       if (slot) unequipSlot(run, slot)
     }
@@ -140,13 +165,7 @@ export function renderInventory(state: GameState): void {
   ctx.fillStyle = '#3a3028'
   ctx.font      = '10px monospace'
   ctx.textAlign = 'right'
-  ctx.fillText('[I] Close   [X] Drop   [↑↓←→] Navigate   [Enter] Use/Equip', PANEL_X + PANEL_W - 10, PANEL_Y + 18)
-
-  // Gold
-  ctx.textAlign = 'left'
-  ctx.fillStyle = '#c8a060'
-  ctx.font      = '11px monospace'
-  ctx.fillText(`Gold: ${run.gold}`, PANEL_X + 10, PANEL_Y + PANEL_H - 10)
+  ctx.fillText('[I] Close   [Q/X] Drop   [↑↓←→] Navigate   [Enter/F] Use/Equip', PANEL_X + PANEL_W - 10, PANEL_Y + 18)
 
   const contentY = PANEL_Y + 28
 
@@ -199,28 +218,32 @@ export function renderInventory(state: GameState): void {
       ctx.strokeRect(sx, sy, SLOT_SZ, SLOT_SZ)
 
       if (def) {
-        // Color swatch in top-left corner
-        const r8 = (def.color       ) & 0xFF
-        const g8 = (def.color >>  8) & 0xFF
-        const b8 = (def.color >> 16) & 0xFF
-        ctx.fillStyle = `rgb(${r8},${g8},${b8})`
-        ctx.fillRect(sx + 3, sy + 3, 8, 8)
-
-        // Item name abbreviated
+        const img = getItemImage(item!.defKey)
+        if (img) {
+          ctx.drawImage(img, sx + 2, sy + 2, SLOT_SZ - 4, SLOT_SZ - 4)
+        } else {
+          // Fallback: color swatch
+          const r8 = (def.color      ) & 0xFF
+          const g8 = (def.color >>  8) & 0xFF
+          const b8 = (def.color >> 16) & 0xFF
+          ctx.fillStyle = `rgb(${r8},${g8},${b8})`
+          ctx.fillRect(sx + 3, sy + 3, 8, 8)
+        }
+        // Abbreviated name below sprite
         ctx.font      = '8px monospace'
         ctx.fillStyle = '#a09070'
         ctx.textAlign = 'center'
         const abbr = def.name.length > 8 ? def.name.slice(0, 7) + '…' : def.name
-        ctx.fillText(abbr, sx + SLOT_SZ / 2, sy + SLOT_SZ - 5)
+        ctx.fillText(abbr, sx + SLOT_SZ / 2, sy + SLOT_SZ - 2)
       }
     }
   }
 
   // ── Selected item detail ───────────────────────────────────────────────────
-  const detailY = PANEL_Y + PANEL_H - 44
+  const detailY = PANEL_Y + PANEL_H - 56
 
   ctx.fillStyle = '#111008'
-  ctx.fillRect(PANEL_X + 10, detailY, PANEL_W - 20, 36)
+  ctx.fillRect(PANEL_X + 10, detailY, PANEL_W - 20, 30)
 
   let selectedItem = null
   let selectedDef  = null
@@ -238,13 +261,68 @@ export function renderInventory(state: GameState): void {
     ctx.textAlign = 'left'
     ctx.font      = 'bold 12px monospace'
     ctx.fillStyle = '#e8c97a'
-    ctx.fillText(selectedDef.name, PANEL_X + 16, detailY + 14)
+    ctx.fillText(selectedDef.name, PANEL_X + 16, detailY + 13)
 
     ctx.font      = '10px monospace'
     ctx.fillStyle = '#6a5a40'
-    const detail = itemDetail(selectedDef)
-    ctx.fillText(detail, PANEL_X + 16, detailY + 28)
+    ctx.fillText(itemDetail(selectedDef), PANEL_X + 16, detailY + 25)
   }
+
+  // ── Stats strip: gold + level, centered ────────────────────────────────────
+  const statsY = PANEL_Y + PANEL_H - 9
+  ctx.textAlign = 'center'
+  ctx.font      = '11px monospace'
+  ctx.fillStyle = '#c8a060'
+  ctx.fillText(`Gold: ${run.gold}   |   Level ${state.levelIndex + 1} / 15`, PANEL_X + PANEL_W / 2, statsY)
+
+  renderDropConfirm(state)
+}
+
+// ── Drop confirmation modal ───────────────────────────────────────────────────
+
+function renderDropConfirm(state: GameState): void {
+  if (!_confirmDrop) return
+  const ctx  = getCtx()
+  const item = state.run.inventory[_confirmDropSlot]
+  const def  = item ? getItemDef(item.defKey) : null
+  const name = def?.name ?? 'item'
+
+  const W = 260, H = 100
+  const mx = CANVAS_W / 2 - W / 2
+  const my = CANVAS_H / 2 - H / 2
+
+  // Background
+  ctx.fillStyle = 'rgba(0,0,0,0.92)'
+  ctx.fillRect(mx, my, W, H)
+  ctx.strokeStyle = '#8a3030'
+  ctx.lineWidth   = 1.5
+  ctx.strokeRect(mx, my, W, H)
+
+  // Prompt
+  ctx.textAlign = 'center'
+  ctx.font      = 'bold 12px monospace'
+  ctx.fillStyle = '#e8c97a'
+  ctx.fillText(`Drop "${name}"?`, CANVAS_W / 2, my + 24)
+
+  ctx.font      = '10px monospace'
+  ctx.fillStyle = '#5a4a30'
+  ctx.fillText('This cannot be undone.', CANVAS_W / 2, my + 40)
+
+  // Options
+  const opts    = ['Yes, drop it', 'No, keep it']
+  const optY    = my + 65
+  const spacing = 120
+  opts.forEach((label, i) => {
+    const ox      = CANVAS_W / 2 + (i === 0 ? -spacing / 2 : spacing / 2)
+    const chosen  = _confirmOpt === i
+    ctx.fillStyle = chosen ? '#e8c97a' : '#3a2e1e'
+    ctx.font      = chosen ? 'bold 12px monospace' : '12px monospace'
+    ctx.fillText((chosen ? '▶ ' : '  ') + label, ox, optY)
+  })
+
+  ctx.font      = '9px monospace'
+  ctx.fillStyle = '#2a2018'
+  ctx.fillText('[↑↓] Toggle   [F/Enter] Confirm   [Esc] Cancel', CANVAS_W / 2, my + H - 8)
 }
 
 function itemDetail(def: ReturnType<typeof getItemDef>): string {
